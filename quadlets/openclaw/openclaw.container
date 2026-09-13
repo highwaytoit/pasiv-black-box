@@ -1,0 +1,45 @@
+[Unit]
+Description=OpenClaw request-driven diagnostic assistant for Pasiv Black Box
+Requires=pasiv-monitoring-network.service
+After=pasiv-monitoring-network.service
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/mnt/monitoring/openclaw /var/mnt/monitoring/openclaw-auth
+
+[Container]
+Image=ghcr.io/openclaw/openclaw:latest
+ContainerName=openclaw
+Network=pasiv-monitoring.network
+NetworkAlias=openclaw
+EnvironmentFile=/etc/pasiv-black-box/openclaw/openclaw.env
+Environment=HOME=/home/node
+Environment=OPENCLAW_HOME=/home/node
+Environment=OPENCLAW_STATE_DIR=/home/node/.openclaw
+Environment=OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json
+Environment=OPENCLAW_CONFIG_DIR=/home/node/.openclaw
+Environment=OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
+Environment=OPENCLAW_GATEWAY_PORT=18789
+Environment=OPENCLAW_DISABLE_BONJOUR=1
+Environment=OPENCLAW_NO_RESPAWN=1
+Environment=OPENCLAW_CONFIG_READONLY=1
+Environment=TZ=UTC
+Volume=/var/mnt/monitoring/openclaw:/home/node/.openclaw:Z
+Volume=/var/mnt/monitoring/openclaw-auth:/home/node/.config/openclaw:Z
+DropCapability=all
+NoNewPrivileges=true
+Memory=2g
+PidsLimit=512
+RunInit=true
+HealthCmd=node dist/docker-healthcheck.js
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=5
+HealthStartPeriod=20s
+Exec=node openclaw.mjs gateway --bind loopback --port 18789
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

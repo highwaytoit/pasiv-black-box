@@ -229,6 +229,7 @@ for template in \
     caddy/caddy.container \
     authelia/authelia.container \
     uptime-kuma/uptime-kuma.container \
+    openclaw/openclaw.container \
     grafana/grafana.container \
     prometheus/prometheus.container \
     blackbox-exporter/blackbox-exporter.container \
@@ -253,6 +254,9 @@ test -f /usr/share/pasiv-black-box/quadlets/node-exporter/docs/NODE-EXPORTER.md
 test -f /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
 test -f /usr/share/pasiv-black-box/quadlets/nut-exporter/docs/NUT-EXPORTER.md
 test -f /usr/share/pasiv-black-box/quadlets/uptime-kuma/docs/UPTIME-KUMA.md
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/docs/OPENCLAW.md
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/examples/openclaw.json.example
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/examples/openclaw.env.example
 test -f /usr/share/pasiv-black-box/quadlets/alertmanager/examples/alertmanager.yml
 test -f /usr/share/pasiv-black-box/doc/README.md
 test -f /usr/share/pasiv-black-box/doc/QUADLETS.md
