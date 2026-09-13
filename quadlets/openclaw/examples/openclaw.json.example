@@ -1,6 +1,13 @@
 {
   "gateway": {
-    "mode": "local"
+    "mode": "local",
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    }
   },
   "agents": {
     "defaults": {

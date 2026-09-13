@@ -10,6 +10,7 @@ The image ships a reusable library of inactive system Quadlet templates under `/
 | Authelia | `authelia/authelia.container` | `authelia/docs/AUTHELIA.md` | documented local config/secrets |
 | Uptime Kuma | `uptime-kuma/uptime-kuma.container` | `uptime-kuma/docs/UPTIME-KUMA.md` | local persistent data directory |
 | OpenClaw | `openclaw/openclaw.container` | `openclaw/docs/OPENCLAW.md` | `openclaw/examples/openclaw.json.example` + `openclaw.env.example` |
+| n8n | `n8n/n8n.container` | `n8n/docs/N8N.md` | `n8n/examples/n8n.env.example` |
 | Grafana | `grafana/grafana.container` | `grafana/docs/GRAFANA.md` | documented local env file |
 | Prometheus | `prometheus/prometheus.container` | `prometheus/docs/PROMETHEUS.md` | `prometheus/examples/prometheus.yml` |
 | Blackbox Exporter | `blackbox-exporter/blackbox-exporter.container` | `blackbox-exporter/docs/BLACKBOX-EXPORTER.md` | `blackbox-exporter/examples/blackbox.yml` |
@@ -44,6 +45,8 @@ NUT Exporter has been explicitly validated on physical Pasiv Black Box hardware 
 
 Uptime Kuma has been explicitly validated on physical Pasiv Black Box hardware with HTTP, TCP, and ICMP Ping monitors; Embedded MariaDB persistence on local storage; no published host port; Caddy reverse proxying over the private monitoring network; Authelia protection; and automatic recovery of all monitors after a full host reboot.
 
-OpenClaw has been explicitly validated on physical Pasiv Black Box hardware with Codex OAuth, the `openai/gpt-5.6-sol` model, owner-only Telegram polling, an internal health response, service restart recovery, loopback-only Gateway binding, no published host port, all Linux capabilities dropped, `no-new-privileges`, read-only application configuration, browser and elevated modes disabled, and no scheduled automations. Host monitoring-data access and full reboot validation are intentionally deferred.
+OpenClaw has been explicitly validated on physical Pasiv Black Box hardware with Codex OAuth, the `openai/gpt-5.6-sol` model, owner-only Telegram polling, an internal health response, service restart recovery, private-network Gateway binding, no published host port, authenticated n8n model access, all Linux capabilities dropped, `no-new-privileges`, read-only application configuration, browser and elevated modes disabled, and no scheduled automations. Full reboot validation is intentionally deferred.
+
+n8n has been explicitly validated on physical Pasiv Black Box hardware with SQLite persistence, no published host port, private Caddy connectivity, Tailscale-only HTTPS, Authelia protection, service restart recovery, an OpenClaw-backed OpenAI credential, and a deterministic read-only Prometheus health workflow. The integration uses the existing OpenClaw Gateway token and Codex OAuth instead of a separate paid model API key. Full host reboot validation is intentionally deferred.
 
 The library is intentionally modular so individual service directories can later be moved to a shared repository without changing their internal layout.

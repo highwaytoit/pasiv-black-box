@@ -2,7 +2,7 @@
 
 OpenClaw provides a request-driven diagnostic assistant for a Pasiv Black Box monitoring node. This module uses `ghcr.io/openclaw/openclaw:latest`, the rootful `pasiv-monitoring.network`, and the image's unprivileged `node` user (UID/GID 1000).
 
-The supplied baseline is intentionally limited. The Gateway listens only on container loopback, publishes no host port, drops all Linux capabilities, enables `no-new-privileges`, disables elevated tools and browser control, and prevents the running application from changing its configuration. Telegram direct messages are restricted to one numeric owner ID, groups are disabled, and background heartbeat, dreaming, and Skill Workshop activity are disabled.
+The supplied baseline is intentionally limited. The Gateway listens on the private container network so approved services such as n8n can use its authenticated API, but it publishes no host port. The container drops all Linux capabilities, enables `no-new-privileges`, disables elevated tools and browser control, and prevents the running application from changing its configuration. Telegram direct messages are restricted to one numeric owner ID, groups are disabled, and background heartbeat, dreaming, and Skill Workshop activity are disabled.
 
 ## Files and storage
 
@@ -23,8 +23,8 @@ sudo install -d -m 0700 -o root -g root /etc/pasiv-black-box/openclaw
 Apply persistent SELinux labels:
 
 ```bash
-sudo semanage fcontext -a -t container_file_t '/var/mnt/monitoring/openclaw(/.*)?'
-sudo semanage fcontext -a -t container_file_t '/var/mnt/monitoring/openclaw-auth(/.*)?'
+sudo semanage fcontext -a -t container_file_t '/mnt/monitoring/openclaw(/.*)?'
+sudo semanage fcontext -a -t container_file_t '/mnt/monitoring/openclaw-auth(/.*)?'
 sudo restorecon -RFv /var/mnt/monitoring/openclaw
 sudo restorecon -RFv /var/mnt/monitoring/openclaw-auth
 sudo restorecon -RFv /etc/pasiv-black-box/openclaw
@@ -100,8 +100,10 @@ sudo cp \
   /etc/containers/systemd/openclaw.container
 sudo chown root:root /etc/containers/systemd/openclaw.container
 sudo systemctl daemon-reload
-sudo systemctl enable --now openclaw.service
+sudo systemctl start openclaw.service
 ```
+
+Do not run `systemctl enable openclaw.service`. Quadlet generates the service at runtime, and its `[Install]` section creates the boot dependency automatically.
 
 Because `OPENCLAW_CONFIG_READONLY=1` is set, make later configuration changes in the host-side JSON while the service is stopped, validate the file, and then start the service again.
 
@@ -120,12 +122,26 @@ sudo podman exec openclaw node openclaw.mjs security audit
 sudo podman exec openclaw node openclaw.mjs automations list
 ```
 
-With the Control UI kept on loopback, the audit warning about missing trusted reverse proxies is expected and does not require adding proxies. Do not reverse-proxy or publish the Gateway unless its trust boundary is redesigned first.
+The Control UI is not reverse-proxied or published. Do not add trusted proxies solely for n8n: n8n authenticates directly to the Gateway over the private container network. Do not publish the Gateway on a host port unless its trust boundary is redesigned first.
+
+## n8n and subscription-included Codex
+
+The n8n module can use OpenClaw as an OpenAI-compatible model endpoint at:
+
+`http://openclaw:18789/v1`
+
+This requires the authenticated Chat Completions endpoint enabled in the supplied JSON example and the Gateway's `lan` bind. The endpoint remains private because the Quadlet publishes no host port.
+
+Use the existing `OPENCLAW_GATEWAY_TOKEN` as the API key in n8n. This is a local bearer token, not an OpenAI Platform API key. OpenClaw continues to authenticate to Codex through OAuth, so no separate external paid AI API account or usage-billed API key is required. Requests consume the normal Codex allowance included with the operator's eligible ChatGPT subscription.
+
+The validated read-only pattern collects fixed monitoring evidence in n8n first and sends that evidence to OpenClaw for explanation. OpenClaw receives no Podman socket, systemd interface, host mount, or write-capable monitoring tool.
+
+See `../../n8n/docs/N8N.md` for the complete workflow.
 
 ## Access boundary
 
-This baseline does not mount the host filesystem, Podman socket, systemd interfaces, journal, or monitoring data. It therefore cannot inspect those resources directly. Monitoring-data integration and any final knowledge or operational configuration are intentionally deferred until the retained service set is decided.
+This baseline does not mount the host filesystem, Podman socket, systemd interfaces, journal, or monitoring data. It therefore cannot inspect those resources directly. Direct host inspection remains unavailable. The validated n8n integration can instead collect fixed read-only monitoring responses and provide that evidence to OpenClaw for analysis.
 
 ## Physical validation
 
-This module was validated on physical Pasiv Black Box hardware with the OpenClaw Gateway health endpoint, service restart recovery, Codex OAuth, the selected model, owner-only Telegram polling and response, hardened runtime settings, and zero scheduled automations. A full host reboot has not yet been validated for this module.
+This module was validated on physical Pasiv Black Box hardware with the OpenClaw Gateway health endpoint, service restart recovery, Codex OAuth, the selected model, owner-only Telegram polling and response, hardened runtime settings, zero scheduled automations, private n8n-to-OpenClaw connectivity, authenticated model discovery, and a successful read-only Prometheus health workflow. A full host reboot has not yet been validated for this module.

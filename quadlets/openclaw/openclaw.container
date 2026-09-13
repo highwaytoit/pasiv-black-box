@@ -35,7 +35,7 @@ HealthInterval=30s
 HealthTimeout=10s
 HealthRetries=5
 HealthStartPeriod=20s
-Exec=node openclaw.mjs gateway --bind loopback --port 18789
+Exec=node openclaw.mjs gateway --bind lan --port 18789
 
 [Service]
 Restart=on-failure
