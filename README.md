@@ -47,12 +47,12 @@ The host layer keeps services close to the hardware when that is useful or neces
 | --- | --- |
 | UPS / power | NUT, UPSide, PowerTOP |
 | Networking | NetworkManager, firewalld, Tailscale, NetBird, WireGuard tools |
-| Administration | Cockpit bridge/pages, tmux, jq |
+| Administration | Cockpit bridge/pages, Homebrew, tmux, jq |
 | Hardware | firmware, fwupd, SMART, NVMe, sensors, USB/PCI tools |
 | Containers | Podman and systemd Quadlets |
 | Diagnostics | tcpdump, dig, traceroute, nc, iperf3 |
 
-The native distro package set is defined in [`build_files/software.env`](build_files/software.env). Third-party package details are maintained in [Home Server Packages](https://github.com/home-server-project/home-server-packages).
+The native distro package set is defined in [`build_files/software.env`](build_files/software.env). UPSide package details are maintained in [Home Server Packages](https://github.com/home-server-project/home-server-packages), while Homebrew integration is supplied by [uBlue Brew](https://github.com/ublue-os/brew).
 
 ## Intentionally not included
 
@@ -72,6 +72,10 @@ Pasiv Black Box follows an appliance-style administration model.
 - The browser-facing Cockpit web service is supplied as a Quadlet template and is not automatically activated.
 
 The system-wide interactive Bash prompt keeps the standard RHEL-style shape with a dark-red `user@host` identity.
+
+Homebrew is integrated through [uBlue Brew](https://github.com/ublue-os/brew), which packages the official Homebrew Linux installation for bootc systems. Pasiv resolves and verifies the current Brew image for every build. Homebrew itself is kept current automatically; installed formula upgrades remain administrator-controlled.
+
+Optional CLI applications can therefore be installed with Brew instead of being baked into the host image. Pasiv intentionally keeps its system Fastfetch configuration and logo, so a later Brew-installed Fastfetch still uses Pasiv branding on both the normal and x86-64-v2 image lines.
 
 ## Networking and remote access
 
@@ -221,6 +225,8 @@ Pasiv Black Box depends on and benefits from several upstream projects, includin
 - [Network UPS Tools](https://networkupstools.org/)
 - [UPSide](https://github.com/deviationist/cockpit-upside)
 - [Home Server Packages](https://github.com/home-server-project/home-server-packages)
+- [uBlue Brew](https://github.com/ublue-os/brew)
+- [Homebrew](https://brew.sh/)
 - [Tailscale](https://tailscale.com/)
 - [NetBird](https://netbird.io/)
 
