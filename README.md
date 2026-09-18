@@ -75,8 +75,6 @@ The system-wide interactive Bash prompt keeps the standard RHEL-style shape with
 
 Homebrew is integrated through [uBlue Brew](https://github.com/ublue-os/brew), which packages the official Homebrew Linux installation for bootc systems. Pasiv resolves and verifies the current Brew image for every build. Homebrew itself is kept current automatically; installed formula upgrades remain administrator-controlled.
 
-Optional CLI applications can therefore be installed with Brew instead of being baked into the host image. Pasiv intentionally keeps its system Fastfetch configuration and logo, so a later Brew-installed Fastfetch still uses Pasiv branding on both the normal and x86-64-v2 image lines.
-
 ## Networking and remote access
 
 The image includes NetworkManager, firewalld, systemd-resolved, WireGuard tooling, Tailscale, and NetBird.
