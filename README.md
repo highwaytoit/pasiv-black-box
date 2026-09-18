@@ -47,7 +47,7 @@ The host layer keeps services close to the hardware when that is useful or neces
 | --- | --- |
 | UPS / power | NUT, UPSide, PowerTOP |
 | Networking | NetworkManager, firewalld, Tailscale, NetBird, WireGuard tools |
-| Administration | Cockpit bridge/pages, Micro, btop, tmux, jq |
+| Administration | Cockpit bridge/pages, tmux, jq |
 | Hardware | firmware, fwupd, SMART, NVMe, sensors, USB/PCI tools |
 | Containers | Podman and systemd Quadlets |
 | Diagnostics | tcpdump, dig, traceroute, nc, iperf3 |
@@ -91,35 +91,57 @@ See [`docs/NUT-UPSide.md`](docs/NUT-UPSide.md) for the local deployment model.
 
 ### Stable
 
+Normal EL10 baseline:
+
 ```text
 ghcr.io/highwaytoit/pasiv-black-box:10
 ```
 
+x86-64-v2 compatibility baseline:
+
+```text
+ghcr.io/highwaytoit/pasiv-black-box:10-v2
+```
+
 ### Testing
+
+Normal EL10 baseline:
 
 ```text
 ghcr.io/highwaytoit/pasiv-black-box:testing
+```
+
+x86-64-v2 compatibility baseline:
+
+```text
+ghcr.io/highwaytoit/pasiv-black-box:testing-v2
 ```
 
 Immutable build tags are also published:
 
 ```text
 ghcr.io/highwaytoit/pasiv-black-box:10-YYYYMMDD-abcdef1
+ghcr.io/highwaytoit/pasiv-black-box:10-v2-YYYYMMDD-abcdef1
 ghcr.io/highwaytoit/pasiv-black-box:testing-YYYYMMDD-abcdef1
+ghcr.io/highwaytoit/pasiv-black-box:testing-v2-YYYYMMDD-abcdef1
 ```
 
-| Channel | Moving tag | Branch | Schedule |
+The normal images follow the standard AlmaLinux 10 x86-64 baseline. The `-v2` images use the AlmaLinux x86-64-v2 package set for older compatible hardware.
+
+Choose the correct CPU-baseline image before installation. Moving an installed system between the normal and v2 variants is not documented as a supported in-place migration path; treat a CPU-baseline change as a reinstall.
+
+| Channel | Moving tags | Branch | Schedule |
 | --- | --- | --- | --- |
-| Stable | `:10` | `main` | Friday 15:35 UTC |
-| Testing | `:testing` | `testing` | Daily 14:35 UTC |
+| Stable | `:10`, `:10-v2` | `main` | Friday 15:35 UTC |
+| Testing | `:testing`, `:testing-v2` | `testing` | Daily 14:35 UTC |
 
 The stable channel is intended for the normal deployment path. The testing channel exists for validating upcoming changes before they reach stable.
 
-Stable performs its own complete build and validation. A Stable image and GitHub Release are published only by the scheduled Stable workflow or a manual **Run workflow** invocation on `main`. Pull requests validate only; ordinary pushes or merges to `main` do not publish Stable artifacts.
+Stable performs its own complete build and validation. Stable publishing creates two independent image lines and two separate GitHub Releases: one for `:10` and one for `:10-v2`. Stable artifacts are published only by the scheduled Stable workflow or a manual **Run workflow** invocation on `main`. Pull requests validate only; ordinary pushes or merges to `main` do not publish Stable artifacts.
 
-Testing immutable `testing-*` image versions older than 45 days are eligible for automatic cleanup while at least seven recent tagged testing builds are retained. The moving `:testing` tag is preserved.
+Testing immutable `testing-*` and `testing-v2-*` image versions older than 45 days are eligible for automatic cleanup while at least seven recent tagged builds for each line are retained. The moving `:testing` and `:testing-v2` tags are preserved.
 
-Stable immutable `10-*` image versions and matching GitHub Releases become eligible for cleanup only after 45 days, while at least the newest seven are retained. The moving `:10` tag is preserved. When an expired Stable GitHub Release is retired, its matching Git tag is removed with it.
+Stable immutable `10-*` and `10-v2-*` image versions and matching GitHub Releases become eligible for cleanup only after 45 days, while at least the newest seven releases from each line are retained. The moving `:10` and `:10-v2` tags are preserved. When an expired Stable GitHub Release is retired, its matching Git tag is removed with it.
 
 ## Updates
 
@@ -134,19 +156,15 @@ sudo bootc status
 sudo bootc upgrade
 ```
 
-To switch an existing installation to the canonical image:
-
-```bash
-sudo bootc switch ghcr.io/highwaytoit/pasiv-black-box:10
-```
+Use the image variant selected at installation time for future updates. The normal and x86-64-v2 images are separate CPU-baseline installation paths; changing between them should be treated as a reinstall rather than an in-place switch.
 
 ## Image signing and releases
 
 Published images are signed with Cosign.
 
-Testing publishes the moving `:testing` tag and immutable `testing-YYYYMMDD-<git-sha>` tags, but does not create GitHub Releases.
+Testing publishes the moving `:testing` and `:testing-v2` tags plus their immutable dated/SHA tags, but does not create GitHub Releases.
 
-A successful scheduled or manually dispatched Stable workflow publishes the moving `:10` tag, an immutable `10-YYYYMMDD-<git-sha>` tag, verifies the published signature, and then creates or updates the matching GitHub Release.
+A successful scheduled or manually dispatched Stable workflow publishes both Stable image lines. The normal image publishes `:10` plus an immutable `10-YYYYMMDD-<git-sha>` tag and receives its own GitHub Release. The v2 image publishes `:10-v2` plus an immutable `10-v2-YYYYMMDD-<git-sha>` tag and receives a separate GitHub Release. Each published digest is signed and verified independently.
 
 The image installs its own container-signature trust configuration so bootc and containers/image can verify the canonical `ghcr.io/highwaytoit/pasiv-black-box` repository.
 
