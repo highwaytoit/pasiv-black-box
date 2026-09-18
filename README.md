@@ -110,7 +110,7 @@ ghcr.io/highwaytoit/pasiv-black-box:testing-YYYYMMDD-abcdef1
 
 | Channel | Moving tag | Branch | Schedule |
 | --- | --- | --- | --- |
-| Stable | `:10` | `main` | Saturday 04:20 UTC |
+| Stable | `:10` | `main` | Friday 15:35 UTC |
 | Testing | `:testing` | `testing` | Daily 14:35 UTC |
 
 The stable channel is intended for the normal deployment path. The testing channel exists for validating upcoming changes before they reach stable.
