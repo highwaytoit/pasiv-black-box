@@ -9,27 +9,45 @@ on:
       - 'docs/**'
   workflow_dispatch:
   schedule:
-    - cron: '20 4 * * 6'
+    - cron: '35 15 * * 5'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
-
 env:
   IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/pasiv-black-box
-  CURRENT_TAG: '10'
   RECHUNK_MAX_LAYERS: '127'
   OCI_LAYER_LIMIT: '128'
-  HOME_SERVER_BASE_IMAGE: ghcr.io/home-server-project/home-server-base-10:stable
   UPSIDE_PACKAGE_IMAGE: ghcr.io/home-server-project/cockpit-upside:stable
 
 jobs:
   build:
+    name: build (${{ matrix.name }})
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64
+            platform: linux/amd64
+            base_image: ghcr.io/home-server-project/home-server-base-10:stable
+            upstream_variant: ''
+            rpm_arch: x86_64
+            microarch: v3
+            current_tag: '10'
+            immutable_prefix: '10'
+          - name: x86_64_v2
+            platform: linux/amd64/v2
+            base_image: ghcr.io/home-server-project/home-server-base-10:stable-v2
+            upstream_variant: v2
+            rpm_arch: x86_64_v2
+            microarch: v2
+            current_tag: '10-v2'
+            immutable_prefix: '10-v2'
 
     steps:
       - name: Checkout
@@ -50,21 +68,31 @@ jobs:
       - name: Resolve verified build inputs
         id: inputs
         shell: bash
+        env:
+          BASE_IMAGE: ${{ matrix.base_image }}
+          UPSTREAM_VARIANT: ${{ matrix.upstream_variant }}
         run: |
           set -euo pipefail
 
           resolve_ref() {
             local image="$1"
+            local variant="${2:-}"
             local digest
+            local -a inspect_args=(--override-arch amd64)
+
+            if [[ -n "${variant}" ]]; then
+              inspect_args+=(--override-variant "${variant}")
+            fi
+
             digest="$(skopeo inspect \
-              --override-arch amd64 \
+              "${inspect_args[@]}" \
               --format '{{.Digest}}' \
               "docker://${image}")"
             [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
             printf '%s@%s' "${image%:*}" "${digest}"
           }
 
-          base_ref="$(resolve_ref "${HOME_SERVER_BASE_IMAGE}")"
+          base_ref="$(resolve_ref "${BASE_IMAGE}" "${UPSTREAM_VARIANT}")"
           upside_ref="$(resolve_ref "${UPSIDE_PACKAGE_IMAGE}")"
 
           cosign verify \
@@ -72,12 +100,12 @@ jobs:
             --key cosign.pub \
             "${base_ref}" >/dev/null
 
+          echo "Build platform: ${{ matrix.platform }}"
           echo "Home Server Base image: ${base_ref}"
           echo "UPSide package image: ${upside_ref}"
 
           echo "base_ref=${base_ref}" >> "${GITHUB_OUTPUT}"
           echo "upside_ref=${upside_ref}" >> "${GITHUB_OUTPUT}"
-
       - name: Build image
         shell: bash
         env:
@@ -86,6 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo podman build \
+            --platform "${{ matrix.platform }}" \
             --pull=always \
             --security-opt=label=disable \
             --cap-add=all \
@@ -95,6 +124,8 @@ jobs:
             --build-arg "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "io.highwaytoit.pasiv-black-box.arch=${{ matrix.name }}" \
+            --label "io.highwaytoit.pasiv-black-box.microarch=${{ matrix.microarch }}" \
             --tag pasiv-black-box:unrechunked \
             --file Containerfile \
             .
@@ -105,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          rechunk_tmp="${RUNNER_TEMP}/pasiv-black-box-rechunk"
+          rechunk_tmp="${RUNNER_TEMP}/pasiv-black-box-rechunk-${{ matrix.name }}"
           sudo mkdir -p "${rechunk_tmp}"
           sudo chmod 1777 "${rechunk_tmp}"
 
@@ -138,9 +169,16 @@ jobs:
 
       - name: Validate completed image
         shell: bash
+        env:
+          EXPECTED_RPM_ARCH: ${{ matrix.rpm_arch }}
+          EXPECTED_IMAGE_ARCH: ${{ matrix.name }}
+          EXPECTED_MICROARCH: ${{ matrix.microarch }}
         run: |
           set -euo pipefail
           sudo podman run --rm \
+            -e "EXPECTED_RPM_ARCH=${EXPECTED_RPM_ARCH}" \
+            -e "EXPECTED_IMAGE_ARCH=${EXPECTED_IMAGE_ARCH}" \
+            -e "EXPECTED_MICROARCH=${EXPECTED_MICROARCH}" \
             --entrypoint /bin/bash \
             pasiv-black-box:test \
             -c '
@@ -174,7 +212,6 @@ jobs:
               command -v netbird
               command -v fwupdmgr
               command -v smartctl
-              command -v micro
               command -v resolvectl
               command -v snmpget
               command -v snmpwalk
@@ -224,17 +261,33 @@ jobs:
               jq empty /etc/containers/policy.json
               grep -Fq "ghcr.io/highwaytoit/pasiv-black-box:" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
               grep -Fq "use-sigstore-attachments: true" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
+
+              glibc_arch="$(rpm -q --qf "%{ARCH}\\n" glibc | head -n1)"
+              if [[ "${glibc_arch}" != "${EXPECTED_RPM_ARCH}" ]]; then
+                echo "ERROR: glibc RPM architecture is ${glibc_arch}; expected ${EXPECTED_RPM_ARCH}" >&2
+                exit 1
+              fi
+              echo "Validated RPM architecture: ${glibc_arch}"
             '
+
+          arch_label="$(sudo podman image inspect pasiv-black-box:test \
+            --format '{{ index .Labels "io.highwaytoit.pasiv-black-box.arch" }}')"
+          microarch_label="$(sudo podman image inspect pasiv-black-box:test \
+            --format '{{ index .Labels "io.highwaytoit.pasiv-black-box.microarch" }}')"
+          [[ "${arch_label}" == "${EXPECTED_IMAGE_ARCH}" ]]
+          [[ "${microarch_label}" == "${EXPECTED_MICROARCH}" ]]
+          echo "Validated image labels: arch=${arch_label}, microarch=${microarch_label}"
 
       - name: Prepare release tags
         if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         shell: bash
         run: |
           set -euo pipefail
-          short_sha="${GITHUB_SHA:0:7}"
-          build_tag="10-$(date -u +%Y%m%d)-${short_sha}"
+          short_sha="${TESTING_SHA:0:7}"
+          build_tag="${{ matrix.immutable_prefix }}-$(date -u +%Y%m%d)-${short_sha}"
           echo "BUILD_TAG=${build_tag}" >> "${GITHUB_ENV}"
-          echo "Publishing ${IMAGE_REPOSITORY}:${CURRENT_TAG} and ${IMAGE_REPOSITORY}:${build_tag}"
+          echo "CURRENT_TAG=${{ matrix.current_tag }}" >> "${GITHUB_ENV}"
+          echo "Publishing ${IMAGE_REPOSITORY}:${{ matrix.current_tag }} and ${IMAGE_REPOSITORY}:${build_tag}"
 
       - name: Login to GHCR
         if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -252,8 +305,8 @@ jobs:
           chmod 600 "${HOME}/.docker/config.json"
 
       - name: Push stable image
-        id: push
         if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        id: push
         shell: bash
         run: |
           set -euo pipefail
@@ -283,6 +336,10 @@ jobs:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           set -euo pipefail
+
+          # Cosign v3 warns that the legacy bundle format is deprecated. Keep
+          # it intentionally until containers/image and bootc can enforce the
+          # current Sigstore bundle format through our sigstoreSigned policy.
           cosign sign -y \
             --new-bundle-format=false \
             --use-signing-config=false \
@@ -313,9 +370,12 @@ jobs:
           {
             echo '## Pasiv Black Box stable'
             echo
-            echo "- Source revision: ${GITHUB_SHA}"
+            echo "- Source revision: ${GITHUB_SHA:-unknown}"
             echo "- Home Server Base: ${HOME_SERVER_BASE_REF:-unknown}"
             echo "- Base profile: AlmaLinux 10 Minimal Plus via Home Server Base 10"
+            echo "- Build platform: ${{ matrix.platform }}"
+            echo "- RPM architecture: ${{ matrix.rpm_arch }}"
+            echo "- CPU microarchitecture baseline: ${{ matrix.microarch }}"
             echo "- UPSide package source: ${UPSIDE_PACKAGE_REF:-unknown}"
             echo "- Rechunked layers: ${RECHUNK_LAYERS:-unknown} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
             if [[ -n "${PUBLISHED_DIGEST:-}" ]]; then
@@ -328,13 +388,25 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   release:
-    name: Publish GitHub release
+    name: Publish GitHub release (${{ matrix.name }})
     needs: build
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-24.04
     permissions:
       contents: write
       packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64
+            current_tag: '10'
+            title: 'Pasiv Black Box 10'
+            latest: 'yes'
+          - name: x86_64_v2
+            current_tag: '10-v2'
+            title: 'Pasiv Black Box 10 x86-64-v2'
+            latest: 'no'
 
     steps:
       - name: Install release tools
@@ -354,44 +426,38 @@ jobs:
             --username "${GITHUB_ACTOR}" \
             --password-stdin
 
-      - name: Publish release for stable image
+      - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ matrix.current_tag }}
+          RELEASE_TITLE_BASE: ${{ matrix.title }}
+          RELEASE_LATEST: ${{ matrix.latest }}
         run: |
           set -euo pipefail
-
           registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
           repository="pasiv-black-box"
           short_sha="${GITHUB_SHA:0:7}"
           release_pattern="^${CURRENT_TAG}-[0-9]{8}-${short_sha}$"
-
           release_tag="$(
             skopeo list-tags "docker://${registry}/${repository}" \
-              | jq -r --arg pattern "${release_pattern}" \
-                  '.Tags[]? | select(test($pattern))' \
+              | jq -r --arg pattern "${release_pattern}" '.Tags[]? | select(test($pattern))' \
               | sort \
               | tail -n 1
           )"
-
-          if [[ -z "${release_tag}" ]]; then
-            echo "Could not find release tag matching ${release_pattern}."
-            exit 1
-          fi
+          [[ -n "${release_tag}" ]] || { echo "Could not find release tag matching ${release_pattern}."; exit 1; }
 
           build_date="${release_tag#${CURRENT_TAG}-}"
           build_date="${build_date%-${short_sha}}"
           release_date="${build_date:0:4}-${build_date:4:2}-${build_date:6:2}"
-
           current_image="${registry}/${repository}:${CURRENT_TAG}"
           release_image="${registry}/${repository}:${release_tag}"
           digest="$(skopeo inspect --format '{{.Digest}}' "docker://${release_image}")"
           [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
-
-          release_title="Pasiv Black Box 10 - ${release_date}"
+          release_title="${RELEASE_TITLE_BASE} - ${release_date}"
 
           cat > /tmp/release-notes.md <<EOF_NOTES
-          ## Pasiv Black Box 10
+          ## ${RELEASE_TITLE_BASE}
 
           Signed Pasiv Black Box image built on Home Server Base 10, with AlmaLinux 10 as the upstream Enterprise Linux foundation.
 
@@ -401,28 +467,25 @@ jobs:
           Immutable: `${release_image}`
           Digest: `${digest}`
 
-          ### Switching to the image
+          ### Installation baseline
 
-          ```bash
-          sudo bootc switch ${current_image}
-          ```
+          This release belongs to the `${CURRENT_TAG}` CPU-baseline image line. Choose the correct image before installation. Moving between the normal and x86-64-v2 lines should be treated as a reinstall rather than an in-place switch.
 
           The published image digest is signed with the Pasiv Black Box Cosign key.
           EOF_NOTES
 
           if gh release view "${release_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release edit "${release_tag}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --title "${release_title}" \
-              --notes-file /tmp/release-notes.md \
-              --latest
+            if [[ "${RELEASE_LATEST}" == "yes" ]]; then
+              gh release edit "${release_tag}" --repo "${GITHUB_REPOSITORY}" --title "${release_title}" --notes-file /tmp/release-notes.md --latest
+            else
+              gh release edit "${release_tag}" --repo "${GITHUB_REPOSITORY}" --title "${release_title}" --notes-file /tmp/release-notes.md
+            fi
           else
-            gh release create "${release_tag}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --target "${GITHUB_SHA}" \
-              --title "${release_title}" \
-              --notes-file /tmp/release-notes.md \
-              --latest
+            if [[ "${RELEASE_LATEST}" == "yes" ]]; then
+              gh release create "${release_tag}" --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --title "${release_title}" --notes-file /tmp/release-notes.md --latest
+            else
+              gh release create "${release_tag}" --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --title "${release_title}" --notes-file /tmp/release-notes.md
+            fi
           fi
 
   cleanup:
@@ -435,13 +498,24 @@ jobs:
       packages: write
 
     steps:
-      - name: Remove expired stable images
+      - name: Remove expired normal stable images
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           packages: pasiv-black-box
           delete-tags: '10-*'
-          exclude-tags: '10,testing,testing-*'
+          exclude-tags: '10,10-v2,10-v2-*,testing,testing-*'
+          older-than: 45 days
+          keep-n-tagged: 7
+          validate: true
+
+      - name: Remove expired v2 stable images
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          packages: pasiv-black-box
+          delete-tags: '10-v2-*'
+          exclude-tags: '10,10-v2,testing,testing-*'
           older-than: 45 days
           keep-n-tagged: 7
           validate: true
@@ -452,41 +526,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
           cutoff_epoch="$(date -u -d '45 days ago' +%s)"
           keep_count=7
 
-          mapfile -t releases < <(
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-              --jq '.[] |
-                    select(.draft == false) |
-                    select(.tag_name | test("^10-[0-9]{8}-[0-9a-f]{7}$")) |
-                    [.published_at, (.id | tostring), .tag_name] |
-                    @tsv' \
-              | sort -r
-          )
+          clean_release_line() {
+            local pattern="$1"
+            local label="$2"
+            local -a releases=()
 
-          echo "Stable releases found: ${#releases[@]}"
-          echo "Keeping at least the newest ${keep_count}; only releases older than 45 days may be removed."
+            mapfile -t releases < <(
+              gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+                --jq '.[] | select(.draft == false) | select(.tag_name | test("'"$pattern"'")) | [.published_at, (.id | tostring), .tag_name] | @tsv' \
+                | sort -r
+            )
 
-          for i in "${!releases[@]}"; do
-            IFS=$'\t' read -r published_at release_id tag <<< "${releases[${i}]}"
+            echo "${label} releases found: ${#releases[@]}"
+            for i in "${!releases[@]}"; do
+              IFS=$'\t' read -r published_at release_id tag <<< "${releases[${i}]}"
+              if (( i < keep_count )); then
+                echo "KEEP newest: ${tag} (${published_at})"
+                continue
+              fi
+              published_epoch="$(date -u -d "${published_at}" +%s)"
+              if (( published_epoch >= cutoff_epoch )); then
+                echo "KEEP recent: ${tag} (${published_at})"
+                continue
+              fi
+              echo "DELETE expired release: ${tag} (${published_at})"
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+              if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+                gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
+              fi
+            done
+          }
 
-            if (( i < keep_count )); then
-              echo "KEEP newest: ${tag} (${published_at})"
-              continue
-            fi
+          clean_release_line '^10-[0-9]{8}-[0-9a-f]{7}$' 'Normal Stable'
+          clean_release_line '^10-v2-[0-9]{8}-[0-9a-f]{7}$' 'V2 Stable'
 
-            published_epoch="$(date -u -d "${published_at}" +%s)"
-            if (( published_epoch >= cutoff_epoch )); then
-              echo "KEEP recent: ${tag} (${published_at})"
-              continue
-            fi
-
-            echo "DELETE expired release: ${tag} (${published_at})"
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
-
-            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
-              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
-            fi
-          done
