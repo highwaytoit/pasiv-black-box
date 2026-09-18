@@ -17,19 +17,38 @@ concurrency:
 
 env:
   IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/pasiv-black-box
-  CURRENT_TAG: 'testing'
   RECHUNK_MAX_LAYERS: '127'
   OCI_LAYER_LIMIT: '128'
-  HOME_SERVER_BASE_IMAGE: ghcr.io/home-server-project/home-server-base-10:stable
   UPSIDE_PACKAGE_IMAGE: ghcr.io/home-server-project/cockpit-upside:stable
 
 jobs:
   build:
+    name: build (${{ matrix.name }})
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64
+            platform: linux/amd64
+            base_image: ghcr.io/home-server-project/home-server-base-10:stable
+            upstream_variant: ''
+            rpm_arch: x86_64
+            microarch: v3
+            current_tag: testing
+            immutable_prefix: testing
+          - name: x86_64_v2
+            platform: linux/amd64/v2
+            base_image: ghcr.io/home-server-project/home-server-base-10:stable-v2
+            upstream_variant: v2
+            rpm_arch: x86_64_v2
+            microarch: v2
+            current_tag: testing-v2
+            immutable_prefix: testing-v2
 
     steps:
       - name: Checkout testing branch
@@ -61,21 +80,31 @@ jobs:
       - name: Resolve verified build inputs
         id: inputs
         shell: bash
+        env:
+          BASE_IMAGE: ${{ matrix.base_image }}
+          UPSTREAM_VARIANT: ${{ matrix.upstream_variant }}
         run: |
           set -euo pipefail
 
           resolve_ref() {
             local image="$1"
+            local variant="${2:-}"
             local digest
+            local -a inspect_args=(--override-arch amd64)
+
+            if [[ -n "${variant}" ]]; then
+              inspect_args+=(--override-variant "${variant}")
+            fi
+
             digest="$(skopeo inspect \
-              --override-arch amd64 \
+              "${inspect_args[@]}" \
               --format '{{.Digest}}' \
               "docker://${image}")"
             [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
             printf '%s@%s' "${image%:*}" "${digest}"
           }
 
-          base_ref="$(resolve_ref "${HOME_SERVER_BASE_IMAGE}")"
+          base_ref="$(resolve_ref "${BASE_IMAGE}" "${UPSTREAM_VARIANT}")"
           upside_ref="$(resolve_ref "${UPSIDE_PACKAGE_IMAGE}")"
 
           cosign verify \
@@ -83,12 +112,12 @@ jobs:
             --key cosign.pub \
             "${base_ref}" >/dev/null
 
+          echo "Build platform: ${{ matrix.platform }}"
           echo "Home Server Base image: ${base_ref}"
           echo "UPSide package image: ${upside_ref}"
 
           echo "base_ref=${base_ref}" >> "${GITHUB_OUTPUT}"
           echo "upside_ref=${upside_ref}" >> "${GITHUB_OUTPUT}"
-
       - name: Build image
         shell: bash
         env:
@@ -97,6 +126,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo podman build \
+            --platform "${{ matrix.platform }}" \
             --pull=always \
             --security-opt=label=disable \
             --cap-add=all \
@@ -106,6 +136,8 @@ jobs:
             --build-arg "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${TESTING_SHA}" \
             --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "io.highwaytoit.pasiv-black-box.arch=${{ matrix.name }}" \
+            --label "io.highwaytoit.pasiv-black-box.microarch=${{ matrix.microarch }}" \
             --tag pasiv-black-box:unrechunked \
             --file Containerfile \
             .
@@ -116,7 +148,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          rechunk_tmp="${RUNNER_TEMP}/pasiv-black-box-rechunk"
+          rechunk_tmp="${RUNNER_TEMP}/pasiv-black-box-rechunk-${{ matrix.name }}"
           sudo mkdir -p "${rechunk_tmp}"
           sudo chmod 1777 "${rechunk_tmp}"
 
@@ -149,9 +181,16 @@ jobs:
 
       - name: Validate completed image
         shell: bash
+        env:
+          EXPECTED_RPM_ARCH: ${{ matrix.rpm_arch }}
+          EXPECTED_IMAGE_ARCH: ${{ matrix.name }}
+          EXPECTED_MICROARCH: ${{ matrix.microarch }}
         run: |
           set -euo pipefail
           sudo podman run --rm \
+            -e "EXPECTED_RPM_ARCH=${EXPECTED_RPM_ARCH}" \
+            -e "EXPECTED_IMAGE_ARCH=${EXPECTED_IMAGE_ARCH}" \
+            -e "EXPECTED_MICROARCH=${EXPECTED_MICROARCH}" \
             --entrypoint /bin/bash \
             pasiv-black-box:test \
             -c '
@@ -185,7 +224,6 @@ jobs:
               command -v netbird
               command -v fwupdmgr
               command -v smartctl
-              command -v micro
               command -v resolvectl
               command -v snmpget
               command -v snmpwalk
@@ -235,16 +273,32 @@ jobs:
               jq empty /etc/containers/policy.json
               grep -Fq "ghcr.io/highwaytoit/pasiv-black-box:" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
               grep -Fq "use-sigstore-attachments: true" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
+
+              glibc_arch="$(rpm -q --qf '%{ARCH}\\n' glibc | head -n1)"
+              if [[ "${glibc_arch}" != "${EXPECTED_RPM_ARCH}" ]]; then
+                echo "ERROR: glibc RPM architecture is ${glibc_arch}; expected ${EXPECTED_RPM_ARCH}" >&2
+                exit 1
+              fi
+              echo "Validated RPM architecture: ${glibc_arch}"
             '
+
+          arch_label="$(sudo podman image inspect pasiv-black-box:test \
+            --format '{{ index .Labels "io.highwaytoit.pasiv-black-box.arch" }}')"
+          microarch_label="$(sudo podman image inspect pasiv-black-box:test \
+            --format '{{ index .Labels "io.highwaytoit.pasiv-black-box.microarch" }}')"
+          [[ "${arch_label}" == "${EXPECTED_IMAGE_ARCH}" ]]
+          [[ "${microarch_label}" == "${EXPECTED_MICROARCH}" ]]
+          echo "Validated image labels: arch=${arch_label}, microarch=${microarch_label}"
 
       - name: Prepare testing tags
         shell: bash
         run: |
           set -euo pipefail
           short_sha="${TESTING_SHA:0:7}"
-          build_tag="testing-$(date -u +%Y%m%d)-${short_sha}"
+          build_tag="${{ matrix.immutable_prefix }}-$(date -u +%Y%m%d)-${short_sha}"
           echo "BUILD_TAG=${build_tag}" >> "${GITHUB_ENV}"
-          echo "Publishing ${IMAGE_REPOSITORY}:${CURRENT_TAG} and ${IMAGE_REPOSITORY}:${build_tag}"
+          echo "CURRENT_TAG=${{ matrix.current_tag }}" >> "${GITHUB_ENV}"
+          echo "Publishing ${IMAGE_REPOSITORY}:${{ matrix.current_tag }} and ${IMAGE_REPOSITORY}:${build_tag}"
 
       - name: Login to GHCR
         shell: bash
@@ -281,7 +335,7 @@ jobs:
           digest="$(cat /tmp/digest)"
           [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
-          echo "Published testing digest: ${digest}"
+          echo "Published ${CURRENT_TAG} digest: ${digest}"
 
       - name: Sign image digest
         shell: bash
@@ -327,6 +381,9 @@ jobs:
             echo "- Source revision: ${TESTING_SHA:-unknown}"
             echo "- Home Server Base: ${HOME_SERVER_BASE_REF:-unknown}"
             echo "- Base profile: AlmaLinux 10 Minimal Plus via Home Server Base 10"
+            echo "- Build platform: ${{ matrix.platform }}"
+            echo "- RPM architecture: ${{ matrix.rpm_arch }}"
+            echo "- CPU microarchitecture baseline: ${{ matrix.microarch }}"
             echo "- UPSide package source: ${UPSIDE_PACKAGE_REF:-unknown}"
             echo "- Rechunked layers: ${RECHUNK_LAYERS:-unknown} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
             if [[ -n "${PUBLISHED_DIGEST:-}" ]]; then
@@ -352,7 +409,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           packages: pasiv-black-box
           delete-tags: 'testing-*'
-          exclude-tags: 'testing,10,10-*'
+          exclude-tags: 'testing,testing-v2,10,10-*'
           older-than: 45 days
           keep-n-tagged: 7
           validate: true

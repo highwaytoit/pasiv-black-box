@@ -24,8 +24,7 @@ if ! dnf repolist --enabled | grep -Eiq '(^|[[:space:]])crb([[:space:]]|$)'; the
     exit 1
 fi
 
-# EPEL provides several lightweight host tools used by this image, including
-# NUT, btop, and micro.
+# EPEL provides host packages used by this image, including NUT.
 dnf install -y epel-release curl
 
 # Official third-party repositories.
@@ -132,7 +131,7 @@ for cmd in \
     upsc nut-scanner pmlogger pminfo pmrep \
     tailscale netbird \
     fwupdmgr smartctl sensors nvme lsusb lspci ethtool powertop \
-    btop micro nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
+    nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
     snmpget snmpwalk \
     openssl curl lsof file unzip semanage \
     cockpit-bridge resolvectl; do

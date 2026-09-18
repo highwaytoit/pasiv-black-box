@@ -11,7 +11,7 @@ COPY cosign.pub /cosign.pub
 
 # UPSide is built and validated by the Home Server Packages project. Pasiv
 # consumes only the published RPM artifact resolved to an exact digest by CI.
-FROM ${UPSIDE_PACKAGE_IMAGE} AS upside-package
+FROM --platform=linux/amd64 ${UPSIDE_PACKAGE_IMAGE} AS upside-package
 
 FROM ${HOME_SERVER_BASE_IMAGE}
 ARG IMAGE_REPOSITORY
