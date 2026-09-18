@@ -1,0 +1,31 @@
+[Unit]
+Description=n8n workflow automation for Pasiv Black Box
+Requires=pasiv-monitoring-network.service
+After=pasiv-monitoring-network.service
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/mnt/monitoring/n8n
+
+[Container]
+Image=docker.io/n8nio/n8n:latest
+ContainerName=n8n
+Network=pasiv-monitoring.network
+NetworkAlias=n8n
+EnvironmentFile=/etc/pasiv-black-box/n8n/n8n.env
+Volume=/var/mnt/monitoring/n8n:/home/node/.n8n:Z
+DropCapability=all
+NoNewPrivileges=true
+Memory=2g
+PidsLimit=512
+HealthCmd=wget --spider -q http://127.0.0.1:5678/healthz
+HealthInterval=30s
+HealthTimeout=10s
+HealthRetries=5
+HealthStartPeriod=60s
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

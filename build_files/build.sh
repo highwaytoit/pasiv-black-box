@@ -129,7 +129,7 @@ install -m0755 /ctx/build_files/validate/identity.sh \
 # Build-time validation. If a declared host capability disappears, fail the image.
 for cmd in \
     bootc podman nmcli nmtui firewall-cmd sshd sudo visudo \
-    upsc nut-scanner pmlogger pminfo \
+    upsc nut-scanner pmlogger pminfo pmrep \
     tailscale netbird \
     fwupdmgr smartctl sensors nvme lsusb lspci ethtool powertop \
     btop micro nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
@@ -160,6 +160,7 @@ rpm -q \
     libusb1-devel \
     pcp \
     pcp-pmda-openmetrics \
+    pcp-system-tools \
     net-snmp-utils \
     selinux-policy-extra \
     cockpit-system \
@@ -211,6 +212,11 @@ for group_name in tty dialout; do
 done
 test "$(stat -c '%a %U %G' /etc/ups/upsd.conf)" = "640 root nut"
 test "$(stat -c '%a %U %G' /etc/ups/upsd.users)" = "640 root nut"
+test -f /usr/lib/systemd/system/nut-server.service.d/10-network-online.conf
+grep -Fqx 'Wants=network-online.target' \
+    /usr/lib/systemd/system/nut-server.service.d/10-network-online.conf
+grep -Fqx 'After=network-online.target' \
+    /usr/lib/systemd/system/nut-server.service.d/10-network-online.conf
 
 # EL10 SELinux policy RPM scriptlets may emit transaction warnings during bootc
 # composition. Require the completed policy store to remain readable.
@@ -222,11 +228,15 @@ for template in \
     network/pasiv-monitoring.network \
     caddy/caddy.container \
     authelia/authelia.container \
+    uptime-kuma/uptime-kuma.container \
+    openclaw/openclaw.container \
+    n8n/n8n.container \
     grafana/grafana.container \
     prometheus/prometheus.container \
     blackbox-exporter/blackbox-exporter.container \
     snmp-exporter/snmp-exporter.container \
     node-exporter/node-exporter.container \
+    nut-exporter/nut-exporter.container \
     loki/loki.container \
     alloy/alloy.container \
     victoriametrics/victoriametrics.container \
@@ -242,6 +252,14 @@ test -f /usr/share/pasiv-black-box/quadlets/snmp-exporter/examples/snmp.env.exam
 test -f /usr/share/pasiv-black-box/quadlets/snmp-exporter/docs/SNMP-EXPORTER.md
 test -f /usr/share/pasiv-black-box/quadlets/node-exporter/examples/prometheus-job.yml
 test -f /usr/share/pasiv-black-box/quadlets/node-exporter/docs/NODE-EXPORTER.md
+test -f /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
+test -f /usr/share/pasiv-black-box/quadlets/nut-exporter/docs/NUT-EXPORTER.md
+test -f /usr/share/pasiv-black-box/quadlets/uptime-kuma/docs/UPTIME-KUMA.md
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/docs/OPENCLAW.md
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/examples/openclaw.json.example
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/examples/openclaw.env.example
+test -f /usr/share/pasiv-black-box/quadlets/n8n/docs/N8N.md
+test -f /usr/share/pasiv-black-box/quadlets/n8n/examples/n8n.env.example
 test -f /usr/share/pasiv-black-box/quadlets/alertmanager/examples/alertmanager.yml
 test -f /usr/share/pasiv-black-box/doc/README.md
 test -f /usr/share/pasiv-black-box/doc/QUADLETS.md
@@ -251,6 +269,9 @@ test -f /usr/share/cockpit/upside/manifest.json
 test -x /usr/libexec/pasiv-black-box/health/identity
 ! grep -q '@@COCKPIT_WS_IMAGE@@' /usr/share/pasiv-black-box/quadlets/cockpit/cockpit.container
 grep -Fq '@@NODE_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/node-exporter/node-exporter.container
+grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/nut-exporter.container
+grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
+grep -Fq '@@NUT_UPS_NAME@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
 
 # External package repositories are build-time inputs only. Keep their repo
 # definitions for provenance and future image composition, but disable them in

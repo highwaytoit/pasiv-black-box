@@ -14,7 +14,7 @@ ContainerName=caddy
 Network=pasiv-monitoring.network
 NetworkAlias=caddy
 EnvironmentFile=/etc/pasiv-black-box/caddy/caddy.env
-Volume=/etc/pasiv-black-box/caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+Volume=/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
 Volume=/var/mnt/monitoring/caddy/data:/data:Z
 Volume=/var/mnt/monitoring/caddy/config:/config:Z
 

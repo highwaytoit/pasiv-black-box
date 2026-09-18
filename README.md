@@ -3,7 +3,7 @@
 [![stable](https://github.com/highwaytoit/pasiv-black-box/actions/workflows/build.yml/badge.svg)](https://github.com/highwaytoit/pasiv-black-box/actions/workflows/build.yml)
 [![testing](https://github.com/highwaytoit/pasiv-black-box/actions/workflows/build-testing.yml/badge.svg)](https://github.com/highwaytoit/pasiv-black-box/actions/workflows/build-testing.yml)
 
-Pasiv Black Box is a small, purpose-built bootc monitoring and infrastructure-supervision appliance built on AlmaLinux OS 10 using a minimal-plus base.
+Pasiv Black Box is a small, purpose-built bootc monitoring and infrastructure-supervision appliance built on [Home Server Base 10](https://github.com/home-server-project/home-server-base-10), with AlmaLinux OS 10 as the upstream Enterprise Linux foundation.
 
 It is intentionally not a general-purpose server distribution. The host is kept focused on infrastructure supervision, UPS and power integration, networking, hardware diagnostics, and the native components needed to support containerized monitoring services.
 
@@ -12,13 +12,15 @@ It is intentionally not a general-purpose server distribution. The host is kept 
 
 ## Upstream foundation
 
-Pasiv Black Box uses AlmaLinux OS 10 as its long-term-stable Enterprise Linux foundation. AlmaLinux provides the kernel, core packages, and EL10 compatibility layer. Pasiv Black Box adds the appliance configuration, monitoring-host tooling, update behavior, image signing, and release pipeline.
+Pasiv Black Box consumes [Home Server Base 10](https://github.com/home-server-project/home-server-base-10) as its direct bootc parent. Home Server Base 10 owns the shared AlmaLinux 10 Minimal Plus composition and generic base behavior. AlmaLinux OS 10 remains the upstream Enterprise Linux source for the kernel, core packages, and EL10 compatibility layer.
+
+Pasiv Black Box adds the appliance-specific configuration, monitoring-host tooling, UPS and power integration, networking, diagnostics, update behavior, image signing, and supplied Quadlet library.
 
 ```text
 AlmaLinux OS 10
       |
       v
-minimal-plus bootc rootfs
+Home Server Base 10
       |
       v
 Pasiv Black Box
@@ -107,10 +109,16 @@ ghcr.io/highwaytoit/pasiv-black-box:testing-YYYYMMDD-abcdef1
 
 | Channel | Moving tag | Branch | Schedule |
 | --- | --- | --- | --- |
-| Stable | `:10` | `main` | Saturday |
-| Testing | `:testing` | `testing` | Daily |
+| Stable | `:10` | `main` | Saturday 04:20 UTC |
+| Testing | `:testing` | `testing` | Daily 14:35 UTC |
 
 The stable channel is intended for the normal deployment path. The testing channel exists for validating upcoming changes before they reach stable.
+
+Stable performs its own complete build and validation. A Stable image and GitHub Release are published only by the scheduled Stable workflow or a manual **Run workflow** invocation on `main`. Pull requests validate only; ordinary pushes or merges to `main` do not publish Stable artifacts.
+
+Testing immutable `testing-*` image versions older than 45 days are eligible for automatic cleanup while at least seven recent tagged testing builds are retained. The moving `:testing` tag is preserved.
+
+Stable immutable `10-*` image versions and matching GitHub Releases become eligible for cleanup only after 45 days, while at least the newest seven are retained. The moving `:10` tag is preserved. When an expired Stable GitHub Release is retired, its matching Git tag is removed with it.
 
 ## Updates
 
@@ -131,9 +139,13 @@ To switch an existing installation to the canonical image:
 sudo bootc switch ghcr.io/highwaytoit/pasiv-black-box:10
 ```
 
-## Image signing
+## Image signing and releases
 
 Published images are signed with Cosign.
+
+Testing publishes the moving `:testing` tag and immutable `testing-YYYYMMDD-<git-sha>` tags, but does not create GitHub Releases.
+
+A successful scheduled or manually dispatched Stable workflow publishes the moving `:10` tag, an immutable `10-YYYYMMDD-<git-sha>` tag, verifies the published signature, and then creates or updates the matching GitHub Release.
 
 The image installs its own container-signature trust configuration so bootc and containers/image can verify the canonical `ghcr.io/highwaytoit/pasiv-black-box` repository.
 
@@ -182,6 +194,7 @@ For everyone else, it is simply a black box.
 
 Pasiv Black Box depends on and benefits from several upstream projects, including:
 
+- [Home Server Base 10](https://github.com/home-server-project/home-server-base-10)
 - [AlmaLinux OS](https://almalinux.org/)
 - [bootc](https://github.com/bootc-dev/bootc)
 - [Podman](https://podman.io/)

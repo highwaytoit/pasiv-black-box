@@ -1,5 +1,5 @@
 ---
-name: Build signed Pasiv Black Box testing image
+name: testing
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - 'docs/**'
   workflow_dispatch:
   schedule:
-    - cron: '20 6 * * *'
+    - cron: '35 14 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-testing
@@ -20,9 +20,7 @@ env:
   CURRENT_TAG: 'testing'
   RECHUNK_MAX_LAYERS: '127'
   OCI_LAYER_LIMIT: '128'
-  ALMA_REPOS_IMAGE: quay.io/almalinuxorg/10-base:10
-  BOOTC_IMAGECTL_IMAGE: quay.io/centos-bootc/centos-bootc:stream10
-  ALMA_BUILDER_IMAGE: quay.io/almalinuxorg/10-kitten-base:10-kitten
+  HOME_SERVER_BASE_IMAGE: ghcr.io/home-server-project/home-server-base-10:stable
   UPSIDE_PACKAGE_IMAGE: ghcr.io/home-server-project/cockpit-upside:stable
 
 jobs:
@@ -60,7 +58,7 @@ jobs:
         with:
           cosign-release: 'v3.1.2'
 
-      - name: Resolve minimal-plus build inputs
+      - name: Resolve verified build inputs
         id: inputs
         shell: bash
         run: |
@@ -77,27 +75,24 @@ jobs:
             printf '%s@%s' "${image%:*}" "${digest}"
           }
 
-          repos_ref="$(resolve_ref "${ALMA_REPOS_IMAGE}")"
-          imagectl_ref="$(resolve_ref "${BOOTC_IMAGECTL_IMAGE}")"
-          builder_ref="$(resolve_ref "${ALMA_BUILDER_IMAGE}")"
+          base_ref="$(resolve_ref "${HOME_SERVER_BASE_IMAGE}")"
           upside_ref="$(resolve_ref "${UPSIDE_PACKAGE_IMAGE}")"
 
-          echo "Alma repository image: ${repos_ref}"
-          echo "bootc imagectl image: ${imagectl_ref}"
-          echo "Alma builder image: ${builder_ref}"
+          cosign verify \
+            --new-bundle-format=false \
+            --key cosign.pub \
+            "${base_ref}" >/dev/null
+
+          echo "Home Server Base image: ${base_ref}"
           echo "UPSide package image: ${upside_ref}"
 
-          echo "repos_ref=${repos_ref}" >> "${GITHUB_OUTPUT}"
-          echo "imagectl_ref=${imagectl_ref}" >> "${GITHUB_OUTPUT}"
-          echo "builder_ref=${builder_ref}" >> "${GITHUB_OUTPUT}"
+          echo "base_ref=${base_ref}" >> "${GITHUB_OUTPUT}"
           echo "upside_ref=${upside_ref}" >> "${GITHUB_OUTPUT}"
 
       - name: Build image
         shell: bash
         env:
-          ALMA_REPOS_REF: ${{ steps.inputs.outputs.repos_ref }}
-          BOOTC_IMAGECTL_REF: ${{ steps.inputs.outputs.imagectl_ref }}
-          ALMA_BUILDER_REF: ${{ steps.inputs.outputs.builder_ref }}
+          HOME_SERVER_BASE_REF: ${{ steps.inputs.outputs.base_ref }}
           UPSIDE_PACKAGE_REF: ${{ steps.inputs.outputs.upside_ref }}
         run: |
           set -euo pipefail
@@ -106,9 +101,7 @@ jobs:
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
-            --build-arg "ALMA_REPOS_IMAGE=${ALMA_REPOS_REF}" \
-            --build-arg "BOOTC_IMAGECTL_IMAGE=${BOOTC_IMAGECTL_REF}" \
-            --build-arg "ALMA_BUILDER_IMAGE=${ALMA_BUILDER_REF}" \
+            --build-arg "HOME_SERVER_BASE_IMAGE=${HOME_SERVER_BASE_REF}" \
             --build-arg "UPSIDE_PACKAGE_IMAGE=${UPSIDE_PACKAGE_REF}" \
             --build-arg "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${TESTING_SHA}" \
@@ -322,9 +315,7 @@ jobs:
         if: always()
         shell: bash
         env:
-          REPOS_REF: ${{ steps.inputs.outputs.repos_ref }}
-          IMAGECTL_REF: ${{ steps.inputs.outputs.imagectl_ref }}
-          BUILDER_REF: ${{ steps.inputs.outputs.builder_ref }}
+          HOME_SERVER_BASE_REF: ${{ steps.inputs.outputs.base_ref }}
           UPSIDE_PACKAGE_REF: ${{ steps.inputs.outputs.upside_ref }}
           RECHUNK_LAYERS: ${{ steps.rechunk.outputs.layers }}
           PUBLISHED_DIGEST: ${{ steps.push.outputs.digest }}
@@ -334,10 +325,8 @@ jobs:
             echo
             echo "- Source branch: testing"
             echo "- Source revision: ${TESTING_SHA:-unknown}"
-            echo "- Base profile: AlmaLinux 10 minimal-plus"
-            echo "- Alma repository source: ${REPOS_REF:-unknown}"
-            echo "- bootc imagectl source: ${IMAGECTL_REF:-unknown}"
-            echo "- Alma builder source: ${BUILDER_REF:-unknown}"
+            echo "- Home Server Base: ${HOME_SERVER_BASE_REF:-unknown}"
+            echo "- Base profile: AlmaLinux 10 Minimal Plus via Home Server Base 10"
             echo "- UPSide package source: ${UPSIDE_PACKAGE_REF:-unknown}"
             echo "- Rechunked layers: ${RECHUNK_LAYERS:-unknown} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
             if [[ -n "${PUBLISHED_DIGEST:-}" ]]; then
@@ -348,3 +337,23 @@ jobs:
               echo '- Published: no image published'
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  cleanup:
+    name: cleanup
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+
+    steps:
+      - name: Remove expired testing images
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          packages: pasiv-black-box
+          delete-tags: 'testing-*'
+          exclude-tags: 'testing,10,10-*'
+          older-than: 45 days
+          keep-n-tagged: 7
+          validate: true
+

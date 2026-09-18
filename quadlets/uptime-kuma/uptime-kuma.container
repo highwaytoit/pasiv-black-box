@@ -1,0 +1,22 @@
+[Unit]
+Description=Uptime Kuma for Pasiv Black Box
+Requires=pasiv-monitoring-network.service
+After=pasiv-monitoring-network.service
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/mnt/monitoring/uptime-kuma
+
+[Container]
+Image=docker.io/louislam/uptime-kuma:2
+ContainerName=uptime-kuma
+Network=pasiv-monitoring.network
+NetworkAlias=uptime-kuma
+AddCapability=CAP_NET_RAW
+Volume=/var/mnt/monitoring/uptime-kuma:/app/data:Z
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

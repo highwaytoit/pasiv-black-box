@@ -15,7 +15,7 @@ Validated with upstream Caddy v2.11.4.
 ## Local paths
 
 ```text
-/etc/pasiv-black-box/caddy/Caddyfile
+/etc/caddy/Caddyfile
 /etc/pasiv-black-box/caddy/caddy.env
 /var/mnt/monitoring/caddy/data
 /var/mnt/monitoring/caddy/config
@@ -34,7 +34,7 @@ Recommended mode is `0600`.
 For the default monitoring storage layout:
 
 ```bash
-sudo semanage fcontext -a -t container_file_t '/mnt/monitoring/caddy(/.*)?'
+sudo semanage fcontext -a -t container_file_t '/var/mnt/monitoring/caddy(/.*)?'
 sudo restorecon -RFv /var/mnt/monitoring/caddy
 ```
 
