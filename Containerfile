@@ -1,5 +1,6 @@
 ARG HOME_SERVER_BASE_IMAGE=ghcr.io/home-server-project/home-server-base-10:stable
 ARG UPSIDE_PACKAGE_IMAGE=ghcr.io/home-server-project/cockpit-upside:stable
+ARG BREW_IMAGE=ghcr.io/ublue-os/brew:latest
 ARG IMAGE_REPOSITORY=ghcr.io/highwaytoit/pasiv-black-box
 
 FROM scratch AS ctx
@@ -13,7 +14,13 @@ COPY cosign.pub /cosign.pub
 # consumes only the published RPM artifact resolved to an exact digest by CI.
 FROM --platform=linux/amd64 ${UPSIDE_PACKAGE_IMAGE} AS upside-package
 
+# uBlue Brew packages the official Homebrew Linux installation for bootc systems.
+# Use its normal amd64 payload for both Pasiv CPU baselines; the v2 distinction
+# belongs to the AlmaLinux/Home Server Base package set, not the Brew OCI stage.
+FROM --platform=linux/amd64 ${BREW_IMAGE} AS brew-package
+
 FROM ${HOME_SERVER_BASE_IMAGE}
+COPY --from=brew-package /system_files /
 ARG IMAGE_REPOSITORY
 
 LABEL containers.bootc=1 \
