@@ -269,6 +269,14 @@ jobs:
               check_file /usr/share/pasiv-black-box/doc/QUADLET-LIBRARY.md
               check_file /usr/share/pasiv-black-box/doc/NUT-UPSide.md
               check_file /usr/libexec/pasiv-black-box/health/identity
+              check_file /usr/share/homebrew.tar.zst
+              check_file /usr/lib/systemd/system/brew-setup.service
+              check_file /usr/lib/systemd/system/brew-update.timer
+              check_file /usr/lib/systemd/system/brew-upgrade.timer
+              check_file /etc/profile.d/brew.sh
+              test "$(systemctl is-enabled brew-setup.service)" = "enabled"
+              test "$(systemctl is-enabled brew-update.timer)" = "enabled"
+              test "$(systemctl is-enabled brew-upgrade.timer 2>/dev/null || true)" = "disabled"
               check_file /usr/lib/pki/containers/highwaytoit.pub
               check_file /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
               check_file /etc/systemd/zram-generator.conf
