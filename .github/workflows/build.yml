@@ -9,7 +9,7 @@ on:
       - 'docs/**'
   workflow_dispatch:
   schedule:
-    - cron: '20 4 * * 6'
+    - cron: '35 15 * * 5'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
