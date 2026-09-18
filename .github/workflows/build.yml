@@ -283,7 +283,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          short_sha="${TESTING_SHA:0:7}"
+          short_sha="${GITHUB_SHA:0:7}"
           build_tag="${{ matrix.immutable_prefix }}-$(date -u +%Y%m%d)-${short_sha}"
           echo "BUILD_TAG=${build_tag}" >> "${GITHUB_ENV}"
           echo "CURRENT_TAG=${{ matrix.current_tag }}" >> "${GITHUB_ENV}"
