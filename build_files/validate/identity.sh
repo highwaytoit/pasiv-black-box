@@ -33,11 +33,18 @@ done
 [[ "${BUG_REPORT_URL:-}" == "https://github.com/highwaytoit/pasiv-black-box/issues" ]] || fail "BUG_REPORT_URL=${BUG_REPORT_URL:-unset}"
 [[ "${CPE_NAME:-}" == "cpe:/o:highwaytoit:pasiv-black-box:10" ]] || fail "CPE_NAME=${CPE_NAME:-unset}"
 
-[[ "${PASIV_BLACK_BOX_BASE_ID:-}" == "almalinux" ]] || fail "base ID metadata is not almalinux"
-[[ "${PASIV_BLACK_BOX_BASE_VERSION_ID%%.*}" == "10" ]] || fail "base VERSION_ID metadata is not AlmaLinux 10"
+[[ "${PASIV_BLACK_BOX_BASE_ID:-}" == "home-server-base" ]] || fail "base ID metadata is not home-server-base"
+[[ "${PASIV_BLACK_BOX_BASE_PRETTY_NAME:-}" == "Home Server Base 10" ]] || fail "base PRETTY_NAME metadata is not Home Server Base 10"
+[[ "${PASIV_BLACK_BOX_BASE_VERSION_ID%%.*}" == "10" ]] || fail "base VERSION_ID metadata is not Home Server Base 10"
 [[ "${PASIV_BLACK_BOX_BASE_PLATFORM_ID:-}" == "platform:el10" ]] || fail "base PLATFORM_ID metadata is not platform:el10"
-[[ "${PASIV_BLACK_BOX_BASE_CPE_NAME:-}" == cpe:/o:almalinux:* ]] || fail "base CPE metadata does not identify AlmaLinux"
+[[ "${PASIV_BLACK_BOX_BASE_CPE_NAME:-}" == "cpe:/o:home-server-project:home-server-base:10" ]] || fail "base CPE metadata does not identify Home Server Base 10"
 [[ "${PASIV_BLACK_BOX_BASE_PROFILE:-}" == "almalinux-10-minimal-plus" ]] || fail "base profile metadata is incorrect"
+[[ "${PASIV_BLACK_BOX_BASE_CHANNEL:-}" == "stable" ]] || fail "base channel metadata is not stable"
+
+[[ "${HOME_SERVER_BASE_UPSTREAM_ID:-}" == "almalinux" ]] || fail "Home Server Base upstream ID metadata is not almalinux"
+[[ "${HOME_SERVER_BASE_UPSTREAM_VERSION_ID%%.*}" == "10" ]] || fail "Home Server Base upstream VERSION_ID metadata is not AlmaLinux 10"
+[[ "${HOME_SERVER_BASE_UPSTREAM_PLATFORM_ID:-}" == "platform:el10" ]] || fail "Home Server Base upstream PLATFORM_ID metadata is not platform:el10"
+[[ "${HOME_SERVER_BASE_UPSTREAM_CPE_NAME:-}" == cpe:/o:almalinux:* ]] || fail "Home Server Base upstream CPE metadata does not identify AlmaLinux"
 
 for key in ALMALINUX_MANTISBT_PROJECT ALMALINUX_MANTISBT_PROJECT_VERSION REDHAT_SUPPORT_PRODUCT REDHAT_SUPPORT_PRODUCT_VERSION SUPPORT_END LOGO; do
     if grep -q "^${key}=" "${OS_RELEASE_USR}"; then
@@ -46,7 +53,7 @@ for key in ALMALINUX_MANTISBT_PROJECT ALMALINUX_MANTISBT_PROJECT_VERSION REDHAT_
 done
 
 if [[ -e "${OS_RELEASE_ETC}" ]] && ! [[ "${OS_RELEASE_ETC}" -ef "${OS_RELEASE_USR}" ]]; then
-    for key in ID NAME PRETTY_NAME VARIANT VARIANT_ID IMAGE_ID IMAGE_VERSION VENDOR_NAME CPE_NAME PASIV_BLACK_BOX_BASE_ID; do
+    for key in ID NAME PRETTY_NAME VARIANT VARIANT_ID IMAGE_ID IMAGE_VERSION VENDOR_NAME CPE_NAME PASIV_BLACK_BOX_BASE_ID PASIV_BLACK_BOX_BASE_CHANNEL HOME_SERVER_BASE_UPSTREAM_ID; do
         usr_value="$(grep -E "^${key}=" "${OS_RELEASE_USR}" | head -n1 || true)"
         etc_value="$(grep -E "^${key}=" "${OS_RELEASE_ETC}" | head -n1 || true)"
         [[ "${usr_value}" == "${etc_value}" ]] || fail "${key} differs between /usr/lib/os-release and /etc/os-release"
@@ -64,5 +71,5 @@ for legacy_path in \
     [[ ! -e "${legacy_path}" ]] || fail "legacy Alma Black Box path remains: ${legacy_path}"
 done
 
-pass "Pasiv Black Box identity and AlmaLinux 10 base metadata"
+pass "Pasiv Black Box identity, Home Server Base 10 parent, and AlmaLinux 10 upstream metadata"
 printf 'PASIV IDENTITY: PASS\n'
