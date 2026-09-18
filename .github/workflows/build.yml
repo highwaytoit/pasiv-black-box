@@ -1,10 +1,8 @@
 ---
-name: Build signed Pasiv Black Box image
+name: stable
 
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
     paths-ignore:
       - '**/README.md'
@@ -22,9 +20,7 @@ env:
   CURRENT_TAG: '10'
   RECHUNK_MAX_LAYERS: '127'
   OCI_LAYER_LIMIT: '128'
-  ALMA_REPOS_IMAGE: quay.io/almalinuxorg/10-base:10
-  BOOTC_IMAGECTL_IMAGE: quay.io/centos-bootc/centos-bootc:stream10
-  ALMA_BUILDER_IMAGE: quay.io/almalinuxorg/10-kitten-base:10-kitten
+  HOME_SERVER_BASE_IMAGE: ghcr.io/home-server-project/home-server-base-10:stable
   UPSIDE_PACKAGE_IMAGE: ghcr.io/home-server-project/cockpit-upside:stable
 
 jobs:
@@ -51,7 +47,7 @@ jobs:
         with:
           cosign-release: 'v3.1.2'
 
-      - name: Resolve minimal-plus build inputs
+      - name: Resolve verified build inputs
         id: inputs
         shell: bash
         run: |
@@ -68,27 +64,24 @@ jobs:
             printf '%s@%s' "${image%:*}" "${digest}"
           }
 
-          repos_ref="$(resolve_ref "${ALMA_REPOS_IMAGE}")"
-          imagectl_ref="$(resolve_ref "${BOOTC_IMAGECTL_IMAGE}")"
-          builder_ref="$(resolve_ref "${ALMA_BUILDER_IMAGE}")"
+          base_ref="$(resolve_ref "${HOME_SERVER_BASE_IMAGE}")"
           upside_ref="$(resolve_ref "${UPSIDE_PACKAGE_IMAGE}")"
 
-          echo "Alma repository image: ${repos_ref}"
-          echo "bootc imagectl image: ${imagectl_ref}"
-          echo "Alma builder image: ${builder_ref}"
+          cosign verify \
+            --new-bundle-format=false \
+            --key cosign.pub \
+            "${base_ref}" >/dev/null
+
+          echo "Home Server Base image: ${base_ref}"
           echo "UPSide package image: ${upside_ref}"
 
-          echo "repos_ref=${repos_ref}" >> "${GITHUB_OUTPUT}"
-          echo "imagectl_ref=${imagectl_ref}" >> "${GITHUB_OUTPUT}"
-          echo "builder_ref=${builder_ref}" >> "${GITHUB_OUTPUT}"
+          echo "base_ref=${base_ref}" >> "${GITHUB_OUTPUT}"
           echo "upside_ref=${upside_ref}" >> "${GITHUB_OUTPUT}"
 
       - name: Build image
         shell: bash
         env:
-          ALMA_REPOS_REF: ${{ steps.inputs.outputs.repos_ref }}
-          BOOTC_IMAGECTL_REF: ${{ steps.inputs.outputs.imagectl_ref }}
-          ALMA_BUILDER_REF: ${{ steps.inputs.outputs.builder_ref }}
+          HOME_SERVER_BASE_REF: ${{ steps.inputs.outputs.base_ref }}
           UPSIDE_PACKAGE_REF: ${{ steps.inputs.outputs.upside_ref }}
         run: |
           set -euo pipefail
@@ -97,9 +90,7 @@ jobs:
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
-            --build-arg "ALMA_REPOS_IMAGE=${ALMA_REPOS_REF}" \
-            --build-arg "BOOTC_IMAGECTL_IMAGE=${BOOTC_IMAGECTL_REF}" \
-            --build-arg "ALMA_BUILDER_IMAGE=${ALMA_BUILDER_REF}" \
+            --build-arg "HOME_SERVER_BASE_IMAGE=${HOME_SERVER_BASE_REF}" \
             --build-arg "UPSIDE_PACKAGE_IMAGE=${UPSIDE_PACKAGE_REF}" \
             --build-arg "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
@@ -169,6 +160,8 @@ jobs:
                 qemu-guest-agent \
                 nut \
                 nut-client \
+                pcp \
+                pcp-pmda-openmetrics \
                 net-snmp-utils \
                 selinux-policy-extra \
                 smartmontools-selinux \
@@ -234,7 +227,7 @@ jobs:
             '
 
       - name: Prepare release tags
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         shell: bash
         run: |
           set -euo pipefail
@@ -244,7 +237,7 @@ jobs:
           echo "Publishing ${IMAGE_REPOSITORY}:${CURRENT_TAG} and ${IMAGE_REPOSITORY}:${build_tag}"
 
       - name: Login to GHCR
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -258,9 +251,9 @@ jobs:
             --password-stdin
           chmod 600 "${HOME}/.docker/config.json"
 
-      - name: Push image
+      - name: Push stable image
         id: push
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         shell: bash
         run: |
           set -euo pipefail
@@ -280,20 +273,16 @@ jobs:
           digest="$(cat /tmp/digest)"
           [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
-          echo "Published digest: ${digest}"
+          echo "Published stable digest: ${digest}"
 
       - name: Sign image digest
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         shell: bash
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           set -euo pipefail
-
-          # Cosign v3 warns that the legacy bundle format is deprecated. Keep
-          # it intentionally until containers/image and bootc can enforce the
-          # current Sigstore bundle format through our sigstoreSigned policy.
           cosign sign -y \
             --new-bundle-format=false \
             --use-signing-config=false \
@@ -301,7 +290,7 @@ jobs:
             "${IMAGE_REPOSITORY}@${DIGEST}"
 
       - name: Verify published signature
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         shell: bash
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -316,61 +305,56 @@ jobs:
         if: always()
         shell: bash
         env:
-          REPOS_REF: ${{ steps.inputs.outputs.repos_ref }}
-          IMAGECTL_REF: ${{ steps.inputs.outputs.imagectl_ref }}
-          BUILDER_REF: ${{ steps.inputs.outputs.builder_ref }}
+          HOME_SERVER_BASE_REF: ${{ steps.inputs.outputs.base_ref }}
           UPSIDE_PACKAGE_REF: ${{ steps.inputs.outputs.upside_ref }}
           RECHUNK_LAYERS: ${{ steps.rechunk.outputs.layers }}
           PUBLISHED_DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           {
-            echo '## Pasiv Black Box'
+            echo '## Pasiv Black Box stable'
             echo
-            echo "- Base profile: AlmaLinux 10 minimal-plus"
-            echo "- Alma repository source: ${REPOS_REF:-unknown}"
-            echo "- bootc imagectl source: ${IMAGECTL_REF:-unknown}"
-            echo "- Alma builder source: ${BUILDER_REF:-unknown}"
+            echo "- Source revision: ${GITHUB_SHA}"
+            echo "- Home Server Base: ${HOME_SERVER_BASE_REF:-unknown}"
+            echo "- Base profile: AlmaLinux 10 Minimal Plus via Home Server Base 10"
             echo "- UPSide package source: ${UPSIDE_PACKAGE_REF:-unknown}"
             echo "- Rechunked layers: ${RECHUNK_LAYERS:-unknown} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
             if [[ -n "${PUBLISHED_DIGEST:-}" ]]; then
-              echo "- Published: ${IMAGE_REPOSITORY}@${PUBLISHED_DIGEST}"
+              echo "- Published tag: ${IMAGE_REPOSITORY}:${CURRENT_TAG}"
+              echo "- Immutable tag: ${IMAGE_REPOSITORY}:${BUILD_TAG:-unknown}"
+              echo "- Published digest: ${IMAGE_REPOSITORY}@${PUBLISHED_DIGEST}"
             else
-              echo '- Published: not applicable for this run'
+              echo '- Published: validation only'
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
   release:
     name: Publish GitHub release
     needs: build
-    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-24.04
-
     permissions:
       contents: write
       packages: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Install release tools
         shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y jq skopeo
 
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-
           printf '%s' "${GHCR_TOKEN}" | skopeo login ghcr.io \
             --username "${GITHUB_ACTOR}" \
             --password-stdin
 
-      - name: Publish GitHub release
+      - name: Publish release for stable image
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -380,9 +364,6 @@ jobs:
           registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
           repository="pasiv-black-box"
           short_sha="${GITHUB_SHA:0:7}"
-
-          # Find the exact immutable tag produced by this workflow rather than
-          # independently guessing the build date.
           release_pattern="^${CURRENT_TAG}-[0-9]{8}-${short_sha}$"
 
           release_tag="$(
@@ -404,67 +385,38 @@ jobs:
 
           current_image="${registry}/${repository}:${CURRENT_TAG}"
           release_image="${registry}/${repository}:${release_tag}"
-
-          digest="$(
-            skopeo inspect \
-              --format '{{.Digest}}' \
-              "docker://${release_image}"
-          )"
-
-          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "Invalid published digest: ${digest}"
-            exit 1
-          fi
+          digest="$(skopeo inspect --format '{{.Digest}}' "docker://${release_image}")"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
 
           release_title="Pasiv Black Box 10 - ${release_date}"
 
           cat > /tmp/release-notes.md <<EOF_NOTES
           ## Pasiv Black Box 10
 
-          Signed Pasiv Black Box image composed from AlmaLinux 10 repositories using the tested minimal-plus bootc profile.
+          Signed Pasiv Black Box image built on Home Server Base 10, with AlmaLinux 10 as the upstream Enterprise Linux foundation.
 
           ### Image
 
-          Current image:
-
-          \`\`\`text
-          ${current_image}
-          \`\`\`
-
-          Release-specific image:
-
-          \`\`\`text
-          ${release_image}
-          \`\`\`
-
-          Published digest:
-
-          \`\`\`text
-          ${digest}
-          \`\`\`
+          Current: `${current_image}`
+          Immutable: `${release_image}`
+          Digest: `${digest}`
 
           ### Switching to the image
 
-          \`\`\`bash
+          ```bash
           sudo bootc switch ${current_image}
-          \`\`\`
+          ```
 
-          The container image is signed with Cosign.
+          The published image digest is signed with the Pasiv Black Box Cosign key.
           EOF_NOTES
 
-          if gh release view "${release_tag}" \
-              --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-
-            echo "Updating existing release ${release_tag}"
-
+          if gh release view "${release_tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "${release_tag}" \
               --repo "${GITHUB_REPOSITORY}" \
               --title "${release_title}" \
               --notes-file /tmp/release-notes.md \
               --latest
           else
-            echo "Creating release ${release_tag}"
-
             gh release create "${release_tag}" \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
@@ -472,3 +424,69 @@ jobs:
               --notes-file /tmp/release-notes.md \
               --latest
           fi
+
+  cleanup:
+    name: cleanup
+    needs: release
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Remove expired stable images
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          packages: pasiv-black-box
+          delete-tags: '10-*'
+          exclude-tags: '10,testing,testing-*'
+          older-than: 45 days
+          keep-n-tagged: 7
+          validate: true
+
+      - name: Remove expired GitHub Releases and tags
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cutoff_epoch="$(date -u -d '45 days ago' +%s)"
+          keep_count=7
+
+          mapfile -t releases < <(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] |
+                    select(.draft == false) |
+                    select(.tag_name | test("^10-[0-9]{8}-[0-9a-f]{7}$")) |
+                    [.published_at, (.id | tostring), .tag_name] |
+                    @tsv' \
+              | sort -r
+          )
+
+          echo "Stable releases found: ${#releases[@]}"
+          echo "Keeping at least the newest ${keep_count}; only releases older than 45 days may be removed."
+
+          for i in "${!releases[@]}"; do
+            IFS=$'\t' read -r published_at release_id tag <<< "${releases[${i}]}"
+
+            if (( i < keep_count )); then
+              echo "KEEP newest: ${tag} (${published_at})"
+              continue
+            fi
+
+            published_epoch="$(date -u -d "${published_at}" +%s)"
+            if (( published_epoch >= cutoff_epoch )); then
+              echo "KEEP recent: ${tag} (${published_at})"
+              continue
+            fi
+
+            echo "DELETE expired release: ${tag} (${published_at})"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
+            fi
+          done
