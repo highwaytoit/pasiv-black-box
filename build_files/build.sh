@@ -85,6 +85,12 @@ systemctl enable pmcd.service pmlogger.service
 # the stable artifact to an exact digest before this image build starts.
 dnf install -y /upside-rpm/cockpit-upside-*.noarch.rpm
 
+# uBlue Brew supplies the official Homebrew bootstrap payload and bootc
+# integration. Keep Homebrew metadata current automatically, while leaving
+# installed formula upgrades under administrator control.
+systemctl preset brew-setup.service brew-update.timer
+systemctl disable brew-upgrade.timer 2>/dev/null || true
+
 # Tailscale is available but remains unconfigured and disabled in the generic image.
 dnf install -y "${TAILSCALE_PACKAGE}"
 systemctl disable tailscaled.service 2>/dev/null || true
@@ -134,6 +140,7 @@ for cmd in \
     nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
     snmpget snmpwalk \
     openssl curl lsof file unzip semanage \
+    git zstd gcc g++ make ps \
     cockpit-bridge resolvectl; do
     command -v "${cmd}"
 done
@@ -166,7 +173,25 @@ rpm -q \
     cockpit-files \
     cockpit-podman \
     cockpit-storaged \
-    cockpit-upside
+    cockpit-upside \
+    git \
+    zstd \
+    gcc \
+    gcc-c++ \
+    make \
+    procps-ng
+
+test -f /usr/share/homebrew.tar.zst
+test -f /usr/lib/systemd/system/brew-setup.service
+test -f /usr/lib/systemd/system/brew-update.service
+test -f /usr/lib/systemd/system/brew-update.timer
+test -f /usr/lib/systemd/system/brew-upgrade.service
+test -f /usr/lib/systemd/system/brew-upgrade.timer
+test -f /etc/profile.d/brew.sh
+tar --zstd -tf /usr/share/homebrew.tar.zst | grep -Eq '(^|/)home/linuxbrew/.linuxbrew/bin/brew$'
+test "$(systemctl is-enabled brew-setup.service)" = "enabled"
+test "$(systemctl is-enabled brew-update.timer)" = "enabled"
+test "$(systemctl is-enabled brew-upgrade.timer 2>/dev/null || true)" = "disabled"
 
 test -e /usr/lib64/libusb-1.0.so
 
