@@ -30,7 +30,7 @@ Pasiv Black Box
       +-- host diagnostics
       +-- Cockpit bridge
       +-- Podman
-      +-- Quadlets templates
+      +-- Quadlets library
 ```
 
 Pasiv Black Box is an independent community project and is not affiliated with or endorsed by the AlmaLinux OS Foundation.
