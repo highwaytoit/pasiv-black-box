@@ -274,7 +274,7 @@ jobs:
               grep -Fq "ghcr.io/highwaytoit/pasiv-black-box:" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
               grep -Fq "use-sigstore-attachments: true" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
 
-              glibc_arch="$(rpm -q --qf '%{ARCH}\\n' glibc | head -n1)"
+              glibc_arch="$(rpm -q --qf "%{ARCH}\\n" glibc | head -n1)"
               if [[ "${glibc_arch}" != "${EXPECTED_RPM_ARCH}" ]]; then
                 echo "ERROR: glibc RPM architecture is ${glibc_arch}; expected ${EXPECTED_RPM_ARCH}" >&2
                 exit 1
