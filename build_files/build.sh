@@ -108,7 +108,6 @@ install -m0755 /ctx/build_files/validate/identity.sh \
 for cmd in \
     bootc podman nmcli nmtui firewall-cmd sshd sudo visudo \
     upsc nut-scanner pmlogger pminfo pmrep \
-    tailscale netbird \
     fwupdmgr smartctl sensors nvme lsusb lspci ethtool powertop \
     nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
     snmpget snmpwalk \
@@ -117,15 +116,6 @@ for cmd in \
     cockpit-bridge resolvectl; do
     command -v "${cmd}"
 done
-
-rpm -q tailscale netbird
-
-test -f /usr/lib/systemd/system/tailscaled.service
-test -f /etc/systemd/system/netbird.service
-test "$(systemctl is-enabled tailscaled.service)" = "enabled"
-test "$(systemctl is-enabled netbird.service)" = "enabled"
-test ! -e /var/lib/tailscale/tailscaled.state
-test ! -e /var/lib/netbird/config.json
 
 rpm -q \
     NetworkManager-tui \
