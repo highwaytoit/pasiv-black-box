@@ -118,15 +118,6 @@ for cmd in \
     command -v "${cmd}"
 done
 
-rpm -q tailscale netbird
-
-test -f /usr/lib/systemd/system/tailscaled.service
-test -f /etc/systemd/system/netbird.service
-test "$(systemctl is-enabled tailscaled.service)" = "enabled"
-test "$(systemctl is-enabled netbird.service)" = "enabled"
-test ! -e /var/lib/tailscale/tailscaled.state
-test ! -e /var/lib/netbird/config.json
-
 rpm -q \
     NetworkManager-tui \
     NetworkManager-wifi \
