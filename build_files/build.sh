@@ -108,7 +108,6 @@ install -m0755 /ctx/build_files/validate/identity.sh \
 for cmd in \
     bootc podman nmcli nmtui firewall-cmd sshd sudo visudo \
     upsc nut-scanner pmlogger pminfo pmrep \
-    tailscale netbird \
     fwupdmgr smartctl sensors nvme lsusb lspci ethtool powertop \
     nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
     snmpget snmpwalk \
@@ -278,13 +277,13 @@ for repo_file in /etc/yum.repos.d/epel*.repo; do
 done
 
 # Fail the build if any known external source remains enabled.
-if dnf repolist --enabled | grep -Eiq 'epel|tailscale|netbird'; then
+if dnf repolist --enabled | grep -Eiq 'epel'; then
     echo "ERROR: an external package repository remains enabled in the final image."
     dnf repolist --enabled
     exit 1
 fi
 
-# Services which define the host itself remain available. Tailscale and NetBird
+# Services which define the host itself remain available.
 # are inherited enabled from Home Server Base 10. UPS behavior, Cockpit web
 # service, and monitoring applications remain appliance-specific. PCP is
 # host-native telemetry support for UPSide history, so its collection services
