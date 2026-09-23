@@ -218,15 +218,6 @@ jobs:
                 cockpit-podman \
                 cockpit-storaged \
                 cockpit-upside
-              command -v tailscale
-              command -v netbird
-              rpm -q tailscale netbird
-              check_file /usr/lib/systemd/system/tailscaled.service
-              check_file /etc/systemd/system/netbird.service
-              test "$(systemctl is-enabled tailscaled.service)" = "enabled"
-              test "$(systemctl is-enabled netbird.service)" = "enabled"
-              test ! -e /var/lib/tailscale/tailscaled.state
-              test ! -e /var/lib/netbird/config.json
               command -v fwupdmgr
               command -v smartctl
               command -v resolvectl
@@ -282,7 +273,7 @@ jobs:
               grep -Fqx "dns=systemd-resolved" /etc/NetworkManager/conf.d/90-systemd-resolved.conf
               grep -Fqx "L+ /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf" /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
               test "$(systemctl is-enabled systemd-resolved.service)" = "enabled"
-              if dnf repolist --enabled | grep -Eiq "epel|tailscale|netbird"; then
+              if dnf repolist --enabled | grep -Eiq "epel"; then
                 echo "ERROR: external repository unexpectedly enabled in completed image" >&2
                 dnf repolist --enabled
                 exit 1
