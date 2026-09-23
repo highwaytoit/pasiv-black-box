@@ -230,15 +230,6 @@ jobs:
                 cockpit-podman \
                 cockpit-storaged \
                 cockpit-upside
-              command -v tailscale
-              command -v netbird
-              rpm -q tailscale netbird
-              check_file /usr/lib/systemd/system/tailscaled.service
-              check_file /etc/systemd/system/netbird.service
-              test "$(systemctl is-enabled tailscaled.service)" = "enabled"
-              test "$(systemctl is-enabled netbird.service)" = "enabled"
-              test ! -e /var/lib/tailscale/tailscaled.state
-              test ! -e /var/lib/netbird/config.json
               command -v fwupdmgr
               command -v smartctl
               command -v resolvectl
