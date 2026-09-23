@@ -79,8 +79,6 @@ Homebrew is integrated through [uBlue Brew](https://github.com/ublue-os/brew), w
 
 The image includes NetworkManager, firewalld, systemd-resolved, WireGuard tooling, Tailscale, and NetBird.
 
-Tailscale and NetBird are installed but are not automatically enrolled. Remote-access identity, keys, and network policy remain deployment-specific.
-
 ## UPS and monitoring role
 
 NUT and UPSide are included natively because UPS monitoring, host shutdown, USB access, and power-state handling belong to the host operating system.

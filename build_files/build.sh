@@ -4,8 +4,6 @@ set -ouex pipefail
 : "${IMAGE_REPOSITORY:?IMAGE_REPOSITORY must be set by the image build}"
 source /ctx/build_files/software.env
 : "${PASIV_BLACK_BOX_PACKAGES:?PASIV_BLACK_BOX_PACKAGES must be set}"
-: "${TAILSCALE_PACKAGE:?TAILSCALE_PACKAGE must be set}"
-: "${NETBIRD_PACKAGE:?NETBIRD_PACKAGE must be set}"
 : "${COCKPIT_WS_IMAGE:?COCKPIT_WS_IMAGE must be set}"
 
 # Declarative host configuration first.
@@ -25,22 +23,7 @@ if ! dnf repolist --enabled | grep -Eiq '(^|[[:space:]])crb([[:space:]]|$)'; the
 fi
 
 # EPEL provides host packages used by this image, including NUT.
-dnf install -y epel-release curl
-
-# Official third-party repositories.
-curl -fsSL \
-    https://pkgs.tailscale.com/stable/rhel/10/tailscale.repo \
-    -o /etc/yum.repos.d/tailscale.repo
-
-cat > /etc/yum.repos.d/netbird.repo <<'REPO'
-[netbird]
-name=netbird
-baseurl=https://pkgs.netbird.io/yum/
-enabled=1
-gpgcheck=1
-gpgkey=https://pkgs.netbird.io/yum/repodata/repomd.xml.key
-repo_gpgcheck=1
-REPO
+dnf install -y epel-release
 
 read -r -a native_packages <<< "${PASIV_BLACK_BOX_PACKAGES}"
 dnf install -y "${native_packages[@]}"
@@ -91,16 +74,6 @@ dnf install -y /upside-rpm/cockpit-upside-*.noarch.rpm
 systemctl preset brew-setup.service brew-update.timer
 systemctl disable brew-upgrade.timer 2>/dev/null || true
 
-# Tailscale is available but remains unconfigured and disabled in the generic image.
-dnf install -y "${TAILSCALE_PACKAGE}"
-systemctl disable tailscaled.service 2>/dev/null || true
-
-# NetBird's RPM scriptlets try to start/configure the service. Install the RPM
-# payload without scriptlets during image composition; runtime enrollment is an
-# explicit administrator action.
-dnf --setopt=tsflags=noscripts install -y "${NETBIRD_PACKAGE}"
-systemctl disable netbird.service 2>/dev/null || true
-
 # NUT configuration is hardware/site specific and is never enabled by the image.
 for unit in nut-server.service nut-monitor.service nut-driver@.service; do
     systemctl disable "${unit}" 2>/dev/null || true
@@ -144,6 +117,15 @@ for cmd in \
     cockpit-bridge resolvectl; do
     command -v "${cmd}"
 done
+
+rpm -q tailscale netbird
+
+test -f /usr/lib/systemd/system/tailscaled.service
+test -f /etc/systemd/system/netbird.service
+test "$(systemctl is-enabled tailscaled.service)" = "enabled"
+test "$(systemctl is-enabled netbird.service)" = "enabled"
+test ! -e /var/lib/tailscale/tailscaled.state
+test ! -e /var/lib/netbird/config.json
 
 rpm -q \
     NetworkManager-tui \
@@ -297,13 +279,9 @@ grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/n
 grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
 grep -Fq '@@NUT_UPS_NAME@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
 
-# External package repositories are build-time inputs only. Keep their repo
-# definitions for provenance and future image composition, but disable them in
-# the deployed image so host-side package-manager operations cannot use them.
-for repo_file in \
-    /etc/yum.repos.d/epel*.repo \
-    /etc/yum.repos.d/tailscale.repo \
-    /etc/yum.repos.d/netbird.repo; do
+# EPEL is a Pasiv build-time input. Keep its repo definitions for provenance,
+# but disable them in the deployed image.
+for repo_file in /etc/yum.repos.d/epel*.repo; do
     [[ -e "${repo_file}" ]] || continue
     sed -Ei 's/^[[:space:]]*enabled[[:space:]]*=[[:space:]]*1[[:space:]]*$/enabled=0/' "${repo_file}"
 done
@@ -315,10 +293,11 @@ if dnf repolist --enabled | grep -Eiq 'epel|tailscale|netbird'; then
     exit 1
 fi
 
-# Services which define the host itself remain available. Remote-access clients,
-# UPS behavior, Cockpit web service, and monitoring applications require explicit
-# administrator activation/configuration. PCP is host-native telemetry support
-# for UPSide history, so its collection services are enabled by the image.
+# Services which define the host itself remain available. Tailscale and NetBird
+# are inherited enabled from Home Server Base 10. UPS behavior, Cockpit web
+# service, and monitoring applications remain appliance-specific. PCP is
+# host-native telemetry support for UPSide history, so its collection services
+# are enabled by the image.
 systemctl enable NetworkManager.service 2>/dev/null || true
 systemctl enable systemd-resolved.service
 systemctl enable firewalld.service 2>/dev/null || true
