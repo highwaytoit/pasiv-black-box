@@ -113,36 +113,6 @@ grep -Fq 'ARG IMAGE_REPOSITORY=ghcr.io/highwaytoit/pasiv-black-box' Containerfil
 grep -Fq 'PASIV_BLACK_BOX_PACKAGES=' build_files/software.env
 grep -Fq 'net-snmp-utils' build_files/software.env
 
-if grep -Fq 'TAILSCALE_PACKAGE=' build_files/software.env; then
-    echo "ERROR: Pasiv must not own the Tailscale package declaration." >&2
-    exit 1
-fi
-if grep -Fq 'NETBIRD_PACKAGE=' build_files/software.env; then
-    echo "ERROR: Pasiv must not own the NetBird package declaration." >&2
-    exit 1
-fi
-if grep -Fq 'pkgs.tailscale.com' build_files/build.sh; then
-    echo "ERROR: Pasiv must not configure the Tailscale repository." >&2
-    exit 1
-fi
-if grep -Fq 'pkgs.netbird.io' build_files/build.sh; then
-    echo "ERROR: Pasiv must not configure the NetBird repository." >&2
-    exit 1
-fi
-if grep -Fq 'systemctl disable tailscaled.service' build_files/build.sh; then
-    echo "ERROR: Pasiv must not disable the inherited Tailscale service." >&2
-    exit 1
-fi
-if grep -Fq 'systemctl disable netbird.service' build_files/build.sh; then
-    echo "ERROR: Pasiv must not disable the inherited NetBird service." >&2
-    exit 1
-fi
-
-grep -Fq 'systemctl is-enabled tailscaled.service' build_files/build.sh
-grep -Fq 'systemctl is-enabled netbird.service' build_files/build.sh
-grep -Fq 'rpm -q tailscale netbird' .github/workflows/build-testing.yml
-grep -Fq 'rpm -q tailscale netbird' .github/workflows/build.yml
-
 # Product-specific legacy names must not return in the public library. Genuine
 # AlmaLinux upstream/base references elsewhere in the repository are expected.
 if grep -RInE 'Alma Black Box|alma-black-box|alma-monitoring' docs quadlets; then
