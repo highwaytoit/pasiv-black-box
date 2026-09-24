@@ -132,7 +132,7 @@ test -f /usr/lib/tmpfiles.d/pcp-pmda-openmetrics.conf
 test "$(systemctl is-enabled pmcd.service)" = "enabled"
 test "$(systemctl is-enabled pmlogger.service)" = "enabled"
 
-# Inherited zram integration required by Passive.
+# Inherited zram integration required by Pasiv.
 test -f /etc/systemd/zram-generator.conf
 grep -Fqx '[zram0]' /etc/systemd/zram-generator.conf
 
