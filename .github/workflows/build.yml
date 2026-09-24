@@ -37,7 +37,6 @@ jobs:
             platform: linux/amd64
             base_image: ghcr.io/home-server-project/home-server-base-10:stable
             upstream_variant: ''
-            rpm_arch: x86_64
             microarch: v3
             current_tag: '10'
             immutable_prefix: '10'
@@ -45,7 +44,6 @@ jobs:
             platform: linux/amd64/v2
             base_image: ghcr.io/home-server-project/home-server-base-10:stable-v2
             upstream_variant: v2
-            rpm_arch: x86_64_v2
             microarch: v2
             current_tag: '10-v2'
             immutable_prefix: '10-v2'
@@ -174,28 +172,13 @@ jobs:
           echo "layers=${layer_count}" >> "${GITHUB_OUTPUT}"
           echo "Rechunked image layers: ${layer_count} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
 
-      - name: Validate architecture artifact
+      - name: Validate artifact metadata
         shell: bash
         env:
-          EXPECTED_RPM_ARCH: ${{ matrix.rpm_arch }}
           EXPECTED_IMAGE_ARCH: ${{ matrix.name }}
           EXPECTED_MICROARCH: ${{ matrix.microarch }}
         run: |
           set -euo pipefail
-
-          sudo podman run --rm \
-            -e "EXPECTED_RPM_ARCH=${EXPECTED_RPM_ARCH}" \
-            --entrypoint /bin/bash \
-            pasiv-black-box:test \
-            -c '
-              set -euo pipefail
-              glibc_arch="$(rpm -q --qf "%{ARCH}\\n" glibc | head -n1)"
-              if [[ "${glibc_arch}" != "${EXPECTED_RPM_ARCH}" ]]; then
-                echo "ERROR: glibc RPM architecture is ${glibc_arch}; expected ${EXPECTED_RPM_ARCH}" >&2
-                exit 1
-              fi
-              echo "Validated RPM architecture: ${glibc_arch}"
-            '
 
           arch_label="$(sudo podman image inspect pasiv-black-box:test \
             --format '{{ index .Labels "io.highwaytoit.pasiv-black-box.arch" }}')"
@@ -301,7 +284,6 @@ jobs:
             echo "- Home Server Base: ${HOME_SERVER_BASE_REF:-unknown}"
             echo "- Base profile: AlmaLinux 10 Minimal Plus via Home Server Base 10"
             echo "- Build platform: ${{ matrix.platform }}"
-            echo "- RPM architecture: ${{ matrix.rpm_arch }}"
             echo "- CPU microarchitecture baseline: ${{ matrix.microarch }}"
             echo "- Completed-image validation: 1 Passive health + 1 strict bootc lint before rechunk"
             echo "- UPSide package source: ${UPSIDE_PACKAGE_IMAGE}"

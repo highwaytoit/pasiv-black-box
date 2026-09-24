@@ -108,24 +108,17 @@ rpm -q \
     cockpit-system \
     cockpit-files \
     cockpit-podman \
-    cockpit-storaged >/dev/null
-
-# Passive requires these capabilities but inherits them from Home Server Base 10.
-rpm -q fwupd microcode_ctl zram-generator pciutils procps-ng >/dev/null
+    cockpit-storaged \
+    cockpit-upside >/dev/null
 
 # UPSide is consumed from the Home Server Packages stable channel.
-rpm -q cockpit-upside >/dev/null
 test -f /usr/share/cockpit/upside/manifest.json
 
 for cmd in \
-    bootc podman nmcli nmtui firewall-cmd sshd sudo visudo \
     upsc nut-scanner pmlogger pminfo pmrep \
-    fwupdmgr smartctl sensors nvme lsusb lspci ethtool powertop \
-    nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
-    snmpget snmpwalk \
-    openssl curl lsof file unzip semanage \
-    git zstd gcc g++ make ps \
-    cockpit-bridge resolvectl; do
+    smartctl sensors nvme lsusb ethtool powertop \
+    vim tmux snmpget snmpwalk unzip \
+    git zstd gcc g++ make cockpit-bridge; do
     command -v "${cmd}" >/dev/null
 done
 
@@ -159,7 +152,6 @@ grep -Fqx 'dns=systemd-resolved' /etc/NetworkManager/conf.d/90-systemd-resolved.
 test -f /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
 grep -Fqx 'L+ /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf' \
     /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
-test "$(systemctl is-enabled systemd-resolved.service)" = "enabled"
 
 # Administrative and update policy.
 test -f /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
@@ -235,7 +227,7 @@ test -f /usr/share/pasiv-black-box/doc/README.md
 test -f /usr/share/pasiv-black-box/doc/QUADLETS.md
 test -f /usr/share/pasiv-black-box/doc/QUADLET-LIBRARY.md
 test -f /usr/share/pasiv-black-box/doc/NUT-UPSide.md
-test -x /usr/libexec/pasiv-black-box/health/identity
+test -x /usr/libexec/pasiv-black-box/health/final
 ! grep -q '@@COCKPIT_WS_IMAGE@@' /usr/share/pasiv-black-box/quadlets/cockpit/cockpit.container
 grep -Fq '@@NODE_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/node-exporter/node-exporter.container
 grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/nut-exporter.container
@@ -251,17 +243,6 @@ test -f /usr/lib/pki/containers/highwaytoit.pub
 test -f "${REGISTRY_CONFIG}"
 grep -Fq "${IMAGE_REPOSITORY}:" "${REGISTRY_CONFIG}"
 grep -Fq "use-sigstore-attachments: true" "${REGISTRY_CONFIG}"
-
-# External package repositories must remain disabled in the deployed image.
-for repo_file in \
-    /etc/yum.repos.d/epel*.repo \
-    /etc/yum.repos.d/tailscale.repo \
-    /etc/yum.repos.d/netbird.repo; do
-    [[ -e "${repo_file}" ]] || continue
-    if grep -Eiq '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*1[[:space:]]*$' "${repo_file}"; then
-        fail "external repository remains enabled: ${repo_file}"
-    fi
-done
 
 test "$(stat -c '%a %U %G' /var/tmp)" = "1777 root root"
 

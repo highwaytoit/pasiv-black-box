@@ -52,5 +52,5 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     IMAGE_REPOSITORY="${IMAGE_REPOSITORY}" \
     /ctx/build_files/finalize-image.sh
 
-RUN /usr/libexec/pasiv-black-box/health/identity \
+RUN /usr/libexec/pasiv-black-box/health/final \
     && bootc container lint --fatal-warnings

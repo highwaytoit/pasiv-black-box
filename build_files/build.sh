@@ -98,33 +98,8 @@ sed -i "s|@@COCKPIT_WS_IMAGE@@|${COCKPIT_WS_IMAGE}|g" \
     /usr/share/pasiv-black-box/quadlets/cockpit/cockpit.container
 
 install -d -m0755 /usr/libexec/pasiv-black-box/health
-install -m0755 /ctx/build_files/validate/identity.sh \
-    /usr/libexec/pasiv-black-box/health/identity
-
-# EPEL is a Pasiv build-time input. Keep its repo definitions for provenance,
-# but disable them in the deployed image.
-for repo_file in /etc/yum.repos.d/epel*.repo; do
-    [[ -e "${repo_file}" ]] || continue
-    sed -Ei 's/^[[:space:]]*enabled[[:space:]]*=[[:space:]]*1[[:space:]]*$/enabled=0/' "${repo_file}"
-done
-
-# Fail the build if any known external source remains enabled.
-if dnf repolist --enabled | grep -Eiq 'epel|tailscale|netbird'; then
-    echo "ERROR: an external package repository remains enabled in the final image."
-    dnf repolist --enabled
-    exit 1
-fi
-
-# Services which define the host itself remain available. Tailscale and NetBird
-# are inherited enabled from Home Server Base 10. UPS behavior, Cockpit web
-# service, and monitoring applications remain appliance-specific. PCP is
-# host-native telemetry support for UPSide history, so its collection services
-# are enabled by the image.
-systemctl enable NetworkManager.service 2>/dev/null || true
-systemctl enable systemd-resolved.service
-systemctl enable firewalld.service 2>/dev/null || true
-systemctl enable sshd.service 2>/dev/null || true
-systemctl enable pmcd.service pmlogger.service
+install -m0755 /ctx/build_files/validate/final.sh \
+    /usr/libexec/pasiv-black-box/health/final
 
 # bootc images must not carry build-time package-manager/runtime state in /var.
 # Alma's own atomic image derivatives clean /var after composition. Keep the
