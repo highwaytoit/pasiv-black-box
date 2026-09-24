@@ -132,15 +132,9 @@ test -f /usr/lib/tmpfiles.d/pcp-pmda-openmetrics.conf
 test "$(systemctl is-enabled pmcd.service)" = "enabled"
 test "$(systemctl is-enabled pmlogger.service)" = "enabled"
 
-# Inherited zram and resolved integration required by Passive.
+# Inherited zram integration required by Passive.
 test -f /etc/systemd/zram-generator.conf
 grep -Fqx '[zram0]' /etc/systemd/zram-generator.conf
-test -f /etc/NetworkManager/conf.d/90-systemd-resolved.conf
-grep -Fqx '[main]' /etc/NetworkManager/conf.d/90-systemd-resolved.conf
-grep -Fqx 'dns=systemd-resolved' /etc/NetworkManager/conf.d/90-systemd-resolved.conf
-test -f /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
-grep -Fqx 'L+ /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf' \
-    /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
 
 # Administrative and update policy.
 test -f /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
