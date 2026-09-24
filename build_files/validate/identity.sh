@@ -71,5 +71,199 @@ for legacy_path in \
     [[ ! -e "${legacy_path}" ]] || fail "legacy Alma Black Box path remains: ${legacy_path}"
 done
 
-pass "Pasiv Black Box identity, Home Server Base 10 parent, and AlmaLinux 10 upstream metadata"
-printf 'PASIV IDENTITY: PASS\n'
+# Passive-owned package delta: exactly the 36 packages requested by this image.
+rpm -q \
+    NetworkManager-wifi \
+    nut \
+    nut-client \
+    libusb1-devel \
+    pcp \
+    pcp-pmda-openmetrics \
+    pcp-system-tools \
+    net-snmp-utils \
+    wireguard-tools \
+    fwupd-efi \
+    amd-ucode-firmware \
+    amd-gpu-firmware \
+    intel-gpu-firmware \
+    iwlegacy-firmware \
+    iwlwifi-dvm-firmware \
+    iwlwifi-mvm-firmware \
+    atheros-firmware \
+    realtek-firmware \
+    smartmontools \
+    lm_sensors \
+    nvme-cli \
+    usbutils \
+    ethtool \
+    powertop \
+    vim-enhanced \
+    tmux \
+    git \
+    zstd \
+    gcc \
+    gcc-c++ \
+    make \
+    unzip \
+    cockpit-system \
+    cockpit-files \
+    cockpit-podman \
+    cockpit-storaged >/dev/null
+
+# Passive requires these capabilities but inherits them from Home Server Base 10.
+rpm -q fwupd microcode_ctl zram-generator pciutils procps-ng >/dev/null
+
+# UPSide is consumed from the Home Server Packages stable channel.
+rpm -q cockpit-upside >/dev/null
+test -f /usr/share/cockpit/upside/manifest.json
+
+for cmd in \
+    bootc podman nmcli nmtui firewall-cmd sshd sudo visudo \
+    upsc nut-scanner pmlogger pminfo pmrep \
+    fwupdmgr smartctl sensors nvme lsusb lspci ethtool powertop \
+    nano vim tmux jq rsync tcpdump dig traceroute nc iperf3 \
+    snmpget snmpwalk \
+    openssl curl lsof file unzip semanage \
+    git zstd gcc g++ make ps \
+    cockpit-bridge resolvectl; do
+    command -v "${cmd}" >/dev/null
+done
+
+# uBlue Brew payload and service policy.
+test -f /usr/share/homebrew.tar.zst
+test -f /usr/lib/systemd/system/brew-setup.service
+test -f /usr/lib/systemd/system/brew-update.service
+test -f /usr/lib/systemd/system/brew-update.timer
+test -f /usr/lib/systemd/system/brew-upgrade.service
+test -f /usr/lib/systemd/system/brew-upgrade.timer
+test -f /etc/profile.d/brew.sh
+tar --zstd -tf /usr/share/homebrew.tar.zst | grep -Eq '(^|/)home/linuxbrew/.linuxbrew/bin/brew$'
+test "$(systemctl is-enabled brew-setup.service)" = "enabled"
+test "$(systemctl is-enabled brew-update.timer)" = "enabled"
+test "$(systemctl is-enabled brew-upgrade.timer 2>/dev/null || true)" = "disabled"
+
+# PCP / UPSide history support.
+test -e /usr/lib64/libusb-1.0.so
+test -x /usr/libexec/pcp/bin/pmcd
+test -x /usr/libexec/pcp/pmdas/openmetrics/Install
+test -f /usr/lib/tmpfiles.d/pcp-pmda-openmetrics.conf
+test "$(systemctl is-enabled pmcd.service)" = "enabled"
+test "$(systemctl is-enabled pmlogger.service)" = "enabled"
+
+# Inherited zram and resolved integration required by Passive.
+test -f /etc/systemd/zram-generator.conf
+grep -Fqx '[zram0]' /etc/systemd/zram-generator.conf
+test -f /etc/NetworkManager/conf.d/90-systemd-resolved.conf
+grep -Fqx '[main]' /etc/NetworkManager/conf.d/90-systemd-resolved.conf
+grep -Fqx 'dns=systemd-resolved' /etc/NetworkManager/conf.d/90-systemd-resolved.conf
+test -f /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
+grep -Fqx 'L+ /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf' \
+    /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
+test "$(systemctl is-enabled systemd-resolved.service)" = "enabled"
+
+# Administrative and update policy.
+test -f /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
+grep -Fqx '%wheel ALL=(ALL) NOPASSWD: ALL' \
+    /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
+test "$(stat -c '%a %U %G' /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel)" = "440 root root"
+visudo -cf /etc/sudoers >/dev/null
+test -f /etc/profile.d/zz-pasiv-black-box-prompt.sh
+test -f /usr/lib/systemd/system/pasiv-black-box-update.service
+test -f /usr/lib/systemd/system/pasiv-black-box-update.timer
+test "$(systemctl is-enabled bootc-fetch-apply-updates.timer)" = "masked"
+test "$(systemctl is-enabled bootc-fetch-apply-updates.service)" = "masked"
+test "$(systemctl is-enabled pasiv-black-box-update.timer)" = "enabled"
+
+# NUT final state.
+getent passwd nut >/dev/null
+getent group nut >/dev/null
+for group_name in tty dialout; do
+    id -nG nut | tr ' ' '\n' | grep -Fxq "${group_name}"
+done
+test "$(stat -c '%a %U %G' /etc/ups/upsd.conf)" = "640 root nut"
+test "$(stat -c '%a %U %G' /etc/ups/upsd.users)" = "640 root nut"
+test -f /usr/lib/systemd/system/nut-server.service.d/10-network-online.conf
+grep -Fqx 'Wants=network-online.target' /usr/lib/systemd/system/nut-server.service.d/10-network-online.conf
+grep -Fqx 'After=network-online.target' /usr/lib/systemd/system/nut-server.service.d/10-network-online.conf
+for unit in nut-server.service nut-monitor.service nut-driver@.service; do
+    [[ "$(systemctl is-enabled "${unit}" 2>/dev/null || true)" != "enabled" ]]
+done
+
+# Completed SELinux policy must remain readable.
+semodule -l >/dev/null
+
+# Preserve the existing inactive Quadlet library and documentation contract.
+for template in \
+    cockpit/cockpit.container \
+    network/pasiv-monitoring.network \
+    caddy/caddy.container \
+    authelia/authelia.container \
+    uptime-kuma/uptime-kuma.container \
+    openclaw/openclaw.container \
+    n8n/n8n.container \
+    grafana/grafana.container \
+    prometheus/prometheus.container \
+    blackbox-exporter/blackbox-exporter.container \
+    snmp-exporter/snmp-exporter.container \
+    node-exporter/node-exporter.container \
+    nut-exporter/nut-exporter.container \
+    loki/loki.container \
+    alloy/alloy.container \
+    victoriametrics/victoriametrics.container \
+    alertmanager/alertmanager.container; do
+    test -f "/usr/share/pasiv-black-box/quadlets/${template}"
+done
+
+test -f /usr/share/pasiv-black-box/quadlets/prometheus/examples/prometheus.yml
+test -f /usr/share/pasiv-black-box/quadlets/blackbox-exporter/examples/blackbox.yml
+test -f /usr/share/pasiv-black-box/quadlets/blackbox-exporter/docs/BLACKBOX-EXPORTER.md
+test -f /usr/share/pasiv-black-box/quadlets/snmp-exporter/examples/snmp-auth.yml
+test -f /usr/share/pasiv-black-box/quadlets/snmp-exporter/examples/snmp.env.example
+test -f /usr/share/pasiv-black-box/quadlets/snmp-exporter/docs/SNMP-EXPORTER.md
+test -f /usr/share/pasiv-black-box/quadlets/node-exporter/examples/prometheus-job.yml
+test -f /usr/share/pasiv-black-box/quadlets/node-exporter/docs/NODE-EXPORTER.md
+test -f /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
+test -f /usr/share/pasiv-black-box/quadlets/nut-exporter/docs/NUT-EXPORTER.md
+test -f /usr/share/pasiv-black-box/quadlets/uptime-kuma/docs/UPTIME-KUMA.md
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/docs/OPENCLAW.md
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/examples/openclaw.json.example
+test -f /usr/share/pasiv-black-box/quadlets/openclaw/examples/openclaw.env.example
+test -f /usr/share/pasiv-black-box/quadlets/n8n/docs/N8N.md
+test -f /usr/share/pasiv-black-box/quadlets/n8n/examples/n8n.env.example
+test -f /usr/share/pasiv-black-box/quadlets/alertmanager/examples/alertmanager.yml
+test -f /usr/share/pasiv-black-box/doc/README.md
+test -f /usr/share/pasiv-black-box/doc/QUADLETS.md
+test -f /usr/share/pasiv-black-box/doc/QUADLET-LIBRARY.md
+test -f /usr/share/pasiv-black-box/doc/NUT-UPSide.md
+test -x /usr/libexec/pasiv-black-box/health/identity
+! grep -q '@@COCKPIT_WS_IMAGE@@' /usr/share/pasiv-black-box/quadlets/cockpit/cockpit.container
+grep -Fq '@@NODE_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/node-exporter/node-exporter.container
+grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/nut-exporter.container
+grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
+grep -Fq '@@NUT_UPS_NAME@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml
+
+# Final image trust.
+POLICY=/etc/containers/policy.json
+REGISTRY_CONFIG=/etc/containers/registries.d/ghcr.io-highwaytoit.yaml
+IMAGE_REPOSITORY=ghcr.io/highwaytoit/pasiv-black-box
+jq empty "${POLICY}"
+test -f /usr/lib/pki/containers/highwaytoit.pub
+test -f "${REGISTRY_CONFIG}"
+grep -Fq "${IMAGE_REPOSITORY}:" "${REGISTRY_CONFIG}"
+grep -Fq "use-sigstore-attachments: true" "${REGISTRY_CONFIG}"
+
+# External package repositories must remain disabled in the deployed image.
+for repo_file in \
+    /etc/yum.repos.d/epel*.repo \
+    /etc/yum.repos.d/tailscale.repo \
+    /etc/yum.repos.d/netbird.repo; do
+    [[ -e "${repo_file}" ]] || continue
+    if grep -Eiq '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*1[[:space:]]*$' "${repo_file}"; then
+        fail "external repository remains enabled: ${repo_file}"
+    fi
+done
+
+test "$(stat -c '%a %U %G' /var/tmp)" = "1777 root root"
+
+pass "Pasiv Black Box completed-image health"
+printf 'PASIV HEALTH: PASS\n'
