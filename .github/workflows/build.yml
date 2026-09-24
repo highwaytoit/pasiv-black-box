@@ -37,7 +37,6 @@ jobs:
             platform: linux/amd64
             base_image: ghcr.io/home-server-project/home-server-base-10:stable
             upstream_variant: ''
-            rpm_arch: x86_64
             microarch: v3
             current_tag: '10'
             immutable_prefix: '10'
@@ -45,7 +44,6 @@ jobs:
             platform: linux/amd64/v2
             base_image: ghcr.io/home-server-project/home-server-base-10:stable-v2
             upstream_variant: v2
-            rpm_arch: x86_64_v2
             microarch: v2
             current_tag: '10-v2'
             immutable_prefix: '10-v2'
@@ -94,7 +92,6 @@ jobs:
           }
 
           base_ref="$(resolve_ref "${BASE_IMAGE}" "${UPSTREAM_VARIANT}")"
-          upside_ref="$(resolve_ref "${UPSIDE_PACKAGE_IMAGE}")"
           brew_ref="$(resolve_ref "${BREW_IMAGE}")"
 
           cosign verify \
@@ -108,17 +105,15 @@ jobs:
 
           echo "Build platform: ${{ matrix.platform }}"
           echo "Home Server Base image: ${base_ref}"
-          echo "UPSide package image: ${upside_ref}"
+          echo "UPSide package image: ${UPSIDE_PACKAGE_IMAGE}"
           echo "uBlue Brew image: ${brew_ref}"
 
           echo "base_ref=${base_ref}" >> "${GITHUB_OUTPUT}"
-          echo "upside_ref=${upside_ref}" >> "${GITHUB_OUTPUT}"
           echo "brew_ref=${brew_ref}" >> "${GITHUB_OUTPUT}"
       - name: Build image
         shell: bash
         env:
           HOME_SERVER_BASE_REF: ${{ steps.inputs.outputs.base_ref }}
-          UPSIDE_PACKAGE_REF: ${{ steps.inputs.outputs.upside_ref }}
           BREW_REF: ${{ steps.inputs.outputs.brew_ref }}
         run: |
           set -euo pipefail
@@ -129,7 +124,7 @@ jobs:
             --cap-add=all \
             --device /dev/fuse \
             --build-arg "HOME_SERVER_BASE_IMAGE=${HOME_SERVER_BASE_REF}" \
-            --build-arg "UPSIDE_PACKAGE_IMAGE=${UPSIDE_PACKAGE_REF}" \
+            --build-arg "UPSIDE_PACKAGE_IMAGE=${UPSIDE_PACKAGE_IMAGE}" \
             --build-arg "BREW_IMAGE=${BREW_REF}" \
             --build-arg "IMAGE_REPOSITORY=${IMAGE_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
@@ -177,119 +172,13 @@ jobs:
           echo "layers=${layer_count}" >> "${GITHUB_OUTPUT}"
           echo "Rechunked image layers: ${layer_count} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
 
-      - name: Validate completed image
+      - name: Validate artifact metadata
         shell: bash
         env:
-          EXPECTED_RPM_ARCH: ${{ matrix.rpm_arch }}
           EXPECTED_IMAGE_ARCH: ${{ matrix.name }}
           EXPECTED_MICROARCH: ${{ matrix.microarch }}
         run: |
           set -euo pipefail
-          sudo podman run --rm \
-            -e "EXPECTED_RPM_ARCH=${EXPECTED_RPM_ARCH}" \
-            -e "EXPECTED_IMAGE_ARCH=${EXPECTED_IMAGE_ARCH}" \
-            -e "EXPECTED_MICROARCH=${EXPECTED_MICROARCH}" \
-            --entrypoint /bin/bash \
-            pasiv-black-box:test \
-            -c '
-              set -euo pipefail
-
-              check_file() {
-                if [[ ! -f "$1" ]]; then
-                  echo "ERROR: expected file missing: $1" >&2
-                  exit 1
-                fi
-              }
-
-              bootc container lint --fatal-warnings
-              rpm -q \
-                systemd-resolved \
-                fwupd-efi \
-                qemu-guest-agent \
-                nut \
-                nut-client \
-                pcp \
-                pcp-pmda-openmetrics \
-                net-snmp-utils \
-                selinux-policy-extra \
-                smartmontools-selinux \
-                cockpit-system \
-                cockpit-files \
-                cockpit-podman \
-                cockpit-storaged \
-                cockpit-upside
-              command -v fwupdmgr
-              command -v smartctl
-              command -v resolvectl
-              command -v snmpget
-              command -v snmpwalk
-              semodule -l >/dev/null
-              check_file /usr/share/cockpit/upside/manifest.json
-              for template in \
-                cockpit/cockpit.container \
-                network/pasiv-monitoring.network \
-                caddy/caddy.container \
-                authelia/authelia.container \
-                grafana/grafana.container \
-                prometheus/prometheus.container \
-                blackbox-exporter/blackbox-exporter.container \
-                snmp-exporter/snmp-exporter.container \
-                node-exporter/node-exporter.container \
-                loki/loki.container \
-                alloy/alloy.container \
-                victoriametrics/victoriametrics.container \
-                alertmanager/alertmanager.container; do
-                check_file "/usr/share/pasiv-black-box/quadlets/${template}"
-              done
-              check_file /usr/share/pasiv-black-box/quadlets/prometheus/examples/prometheus.yml
-              check_file /usr/share/pasiv-black-box/quadlets/blackbox-exporter/examples/blackbox.yml
-              check_file /usr/share/pasiv-black-box/quadlets/blackbox-exporter/docs/BLACKBOX-EXPORTER.md
-              check_file /usr/share/pasiv-black-box/quadlets/snmp-exporter/examples/snmp-auth.yml
-              check_file /usr/share/pasiv-black-box/quadlets/snmp-exporter/examples/snmp.env.example
-              check_file /usr/share/pasiv-black-box/quadlets/snmp-exporter/docs/SNMP-EXPORTER.md
-              check_file /usr/share/pasiv-black-box/quadlets/node-exporter/examples/prometheus-job.yml
-              check_file /usr/share/pasiv-black-box/quadlets/node-exporter/docs/NODE-EXPORTER.md
-              check_file /usr/share/pasiv-black-box/quadlets/alertmanager/examples/alertmanager.yml
-              check_file /usr/share/pasiv-black-box/doc/README.md
-              check_file /usr/share/pasiv-black-box/doc/QUADLETS.md
-              check_file /usr/share/pasiv-black-box/doc/QUADLET-LIBRARY.md
-              check_file /usr/share/pasiv-black-box/doc/NUT-UPSide.md
-              check_file /usr/libexec/pasiv-black-box/health/identity
-              check_file /usr/share/homebrew.tar.zst
-              check_file /usr/lib/systemd/system/brew-setup.service
-              check_file /usr/lib/systemd/system/brew-update.timer
-              check_file /usr/lib/systemd/system/brew-upgrade.timer
-              check_file /etc/profile.d/brew.sh
-              test "$(systemctl is-enabled brew-setup.service)" = "enabled"
-              test "$(systemctl is-enabled brew-update.timer)" = "enabled"
-              test "$(systemctl is-enabled brew-upgrade.timer 2>/dev/null || true)" = "disabled"
-              check_file /usr/lib/pki/containers/highwaytoit.pub
-              check_file /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
-              check_file /etc/systemd/zram-generator.conf
-              check_file /etc/NetworkManager/conf.d/90-systemd-resolved.conf
-              check_file /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
-              grep -Fq "@@NODE_EXPORTER_LISTEN_ADDRESS@@" /usr/share/pasiv-black-box/quadlets/node-exporter/node-exporter.container
-              grep -Fq "@@NODE_EXPORTER_LISTEN_ADDRESS@@" /usr/share/pasiv-black-box/quadlets/node-exporter/examples/prometheus-job.yml
-              grep -Fqx "dns=systemd-resolved" /etc/NetworkManager/conf.d/90-systemd-resolved.conf
-              grep -Fqx "L+ /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf" /usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf
-              test "$(systemctl is-enabled systemd-resolved.service)" = "enabled"
-              if dnf repolist --enabled | grep -Eiq "epel"; then
-                echo "ERROR: external repository unexpectedly enabled in completed image" >&2
-                dnf repolist --enabled
-                exit 1
-              fi
-              /usr/libexec/pasiv-black-box/health/identity
-              jq empty /etc/containers/policy.json
-              grep -Fq "ghcr.io/highwaytoit/pasiv-black-box:" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
-              grep -Fq "use-sigstore-attachments: true" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
-
-              glibc_arch="$(rpm -q --qf "%{ARCH}\\n" glibc | head -n1)"
-              if [[ "${glibc_arch}" != "${EXPECTED_RPM_ARCH}" ]]; then
-                echo "ERROR: glibc RPM architecture is ${glibc_arch}; expected ${EXPECTED_RPM_ARCH}" >&2
-                exit 1
-              fi
-              echo "Validated RPM architecture: ${glibc_arch}"
-            '
 
           arch_label="$(sudo podman image inspect pasiv-black-box:test \
             --format '{{ index .Labels "io.highwaytoit.pasiv-black-box.arch" }}')"
@@ -384,7 +273,6 @@ jobs:
         shell: bash
         env:
           HOME_SERVER_BASE_REF: ${{ steps.inputs.outputs.base_ref }}
-          UPSIDE_PACKAGE_REF: ${{ steps.inputs.outputs.upside_ref }}
           BREW_REF: ${{ steps.inputs.outputs.brew_ref }}
           RECHUNK_LAYERS: ${{ steps.rechunk.outputs.layers }}
           PUBLISHED_DIGEST: ${{ steps.push.outputs.digest }}
@@ -396,9 +284,9 @@ jobs:
             echo "- Home Server Base: ${HOME_SERVER_BASE_REF:-unknown}"
             echo "- Base profile: AlmaLinux 10 Minimal Plus via Home Server Base 10"
             echo "- Build platform: ${{ matrix.platform }}"
-            echo "- RPM architecture: ${{ matrix.rpm_arch }}"
             echo "- CPU microarchitecture baseline: ${{ matrix.microarch }}"
-            echo "- UPSide package source: ${UPSIDE_PACKAGE_REF:-unknown}"
+            echo "- Completed-image validation: 1 Passive health + 1 strict bootc lint before rechunk"
+            echo "- UPSide package source: ${UPSIDE_PACKAGE_IMAGE}"
             echo "- uBlue Brew image: ${BREW_REF:-unknown}"
             echo "- Rechunked layers: ${RECHUNK_LAYERS:-unknown} / OCI max ${OCI_LAYER_LIMIT} (RPM chunk target ${RECHUNK_MAX_LAYERS})"
             if [[ -n "${PUBLISHED_DIGEST:-}" ]]; then

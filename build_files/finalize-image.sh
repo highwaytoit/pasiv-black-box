@@ -136,9 +136,5 @@ done
 
 chmod 0644 "${OS_RELEASE_FILES[@]}"
 
-# Verify the completed image trusts its canonical package path.
-jq empty /etc/containers/policy.json
-test -f /usr/lib/pki/containers/highwaytoit.pub
-test -f /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
-grep -Fq "${IMAGE_REPOSITORY}:" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
-grep -Fq "use-sigstore-attachments: true" /etc/containers/registries.d/ghcr.io-highwaytoit.yaml
+# Finalize image trust after Passive product identity is applied.
+/ctx/build_files/install-image-trust.sh "${IMAGE_REPOSITORY}"

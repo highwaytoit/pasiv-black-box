@@ -8,7 +8,7 @@ bash -n build_files/build.sh
 bash -n build_files/finalize-image.sh
 bash -n build_files/install-image-trust.sh
 bash -n build_files/software.env
-bash -n build_files/validate/identity.sh
+bash -n build_files/validate/final.sh
 
 python3 - <<'PY2'
 from pathlib import Path
@@ -66,7 +66,7 @@ required = [
     'quadlets/alertmanager/examples/alertmanager.yml',
     'quadlets/alertmanager/docs/ALERTMANAGER.md',
     'build_files/finalize-image.sh',
-    'build_files/validate/identity.sh',
+    'build_files/validate/final.sh',
     'system_files/etc/NetworkManager/conf.d/90-systemd-resolved.conf',
     'system_files/usr/lib/tmpfiles.d/pasiv-black-box-resolved.conf',
     'system_files/etc/sudoers.d/90-pasiv-black-box-passwordless-wheel',
