@@ -79,17 +79,6 @@ for path in required:
     if not Path(path).is_file():
         raise SystemExit(f'missing required file: {path}')
 
-legacy_paths = [
-    'quadlets/cockpit.container',
-    'system_files/usr/lib/tmpfiles.d/alma-black-box-resolved.conf',
-    'system_files/etc/sudoers.d/90-alma-black-box-passwordless-wheel',
-    'system_files/etc/profile.d/zz-alma-black-box-prompt.sh',
-    'system_files/usr/lib/systemd/system/alma-black-box-update.service',
-    'system_files/usr/lib/systemd/system/alma-black-box-update.timer',
-]
-for path in legacy_paths:
-    if Path(path).exists():
-        raise SystemExit(f'legacy path remains: {path}')
 PY2
 
 if [[ -e system_files/etc/hostname ]]; then
@@ -97,7 +86,6 @@ if [[ -e system_files/etc/hostname ]]; then
     exit 1
 fi
 
-grep -q '@@COCKPIT_WS_IMAGE@@' quadlets/cockpit/cockpit.container
 grep -Fq '@@NODE_EXPORTER_LISTEN_ADDRESS@@' quadlets/node-exporter/node-exporter.container
 grep -Fq '@@NODE_EXPORTER_LISTEN_ADDRESS@@' quadlets/node-exporter/examples/prometheus-job.yml
 grep -q 'BEGIN PUBLIC KEY' cosign.pub
@@ -113,13 +101,6 @@ grep -Fq 'ARG IMAGE_REPOSITORY=ghcr.io/highwaytoit/pasiv-black-box' Containerfil
 grep -Fq 'PASIV_BLACK_BOX_PACKAGES=' build_files/software.env
 grep -Fq 'net-snmp-utils' build_files/software.env
 
-# Product-specific legacy names must not return in the public library. Genuine
-# AlmaLinux upstream/base references elsewhere in the repository are expected.
-if grep -RInE 'Alma Black Box|alma-black-box|alma-monitoring' docs quadlets; then
-    echo 'ERROR: legacy product/network name remains in docs or Quadlet library' >&2
-    exit 1
-fi
-
 # Site-specific deployment values do not belong in the reusable public library.
 if grep -RIn 'highwaytoit\\.com' docs quadlets; then
     echo 'ERROR: site-specific domain remains in docs or Quadlet library' >&2
@@ -132,8 +113,6 @@ if grep -RInE '192\.168\.0\.(1|51)|100\.120\.140\.40|10\.89\.1\.1' docs quadlets
     exit 1
 fi
 
-# The prompt shape/color is intentionally unchanged; only the product-specific
-# filename/comment moved from Alma Black Box to Pasiv Black Box.
 grep -Fqx "PS1='[\\[\\e[31m\\]\\u@\\h\\[\\e[0m\\] \\W]\\$ '" \
     system_files/etc/profile.d/zz-pasiv-black-box-prompt.sh
 

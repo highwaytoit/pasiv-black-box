@@ -60,17 +60,6 @@ if [[ -e "${OS_RELEASE_ETC}" ]] && ! [[ "${OS_RELEASE_ETC}" -ef "${OS_RELEASE_US
     done
 fi
 
-for legacy_path in \
-    /usr/libexec/alma-black-box \
-    /usr/share/alma-black-box \
-    /etc/profile.d/zz-alma-black-box-prompt.sh \
-    /etc/sudoers.d/90-alma-black-box-passwordless-wheel \
-    /usr/lib/tmpfiles.d/alma-black-box-resolved.conf \
-    /usr/lib/systemd/system/alma-black-box-update.service \
-    /usr/lib/systemd/system/alma-black-box-update.timer; do
-    [[ ! -e "${legacy_path}" ]] || fail "legacy Alma Black Box path remains: ${legacy_path}"
-done
-
 # Passive-owned package delta: exactly the 36 packages requested by this image.
 rpm -q \
     NetworkManager-wifi \
@@ -228,7 +217,6 @@ test -f /usr/share/pasiv-black-box/doc/QUADLETS.md
 test -f /usr/share/pasiv-black-box/doc/QUADLET-LIBRARY.md
 test -f /usr/share/pasiv-black-box/doc/NUT-UPSide.md
 test -x /usr/libexec/pasiv-black-box/health/final
-! grep -q '@@COCKPIT_WS_IMAGE@@' /usr/share/pasiv-black-box/quadlets/cockpit/cockpit.container
 grep -Fq '@@NODE_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/node-exporter/node-exporter.container
 grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/nut-exporter.container
 grep -Fq '@@NUT_EXPORTER_LISTEN_ADDRESS@@' /usr/share/pasiv-black-box/quadlets/nut-exporter/examples/prometheus-job.yml

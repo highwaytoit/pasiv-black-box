@@ -9,11 +9,10 @@ Wants=network-online.target
 After=network-online.target sshd.service
 
 [Container]
-Image=@@COCKPIT_WS_IMAGE@@
+Image=quay.io/cockpit/ws:latest
 ContainerName=cockpit-ws
 Volume=/:/host
 Environment=NAME=cockpit-ws
-Environment=IMAGE=@@COCKPIT_WS_IMAGE@@
 Exec=/container/label-run
 PodmanArgs=--privileged --pid=host
 
