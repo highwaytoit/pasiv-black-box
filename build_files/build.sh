@@ -4,7 +4,6 @@ set -ouex pipefail
 : "${IMAGE_REPOSITORY:?IMAGE_REPOSITORY must be set by the image build}"
 source /ctx/build_files/software.env
 : "${PASIV_BLACK_BOX_PACKAGES:?PASIV_BLACK_BOX_PACKAGES must be set}"
-: "${COCKPIT_WS_IMAGE:?COCKPIT_WS_IMAGE must be set}"
 
 # Declarative host configuration first.
 cp -avf /ctx/system_files/. /
@@ -89,8 +88,6 @@ cp -avf /ctx/docs/. /usr/share/pasiv-black-box/doc/
 
 install -d -m0755 /usr/share/pasiv-black-box/quadlets
 cp -avf /ctx/quadlets/. /usr/share/pasiv-black-box/quadlets/
-sed -i "s|@@COCKPIT_WS_IMAGE@@|${COCKPIT_WS_IMAGE}|g" \
-    /usr/share/pasiv-black-box/quadlets/cockpit/cockpit.container
 
 install -d -m0755 /usr/libexec/pasiv-black-box/health
 install -m0755 /ctx/build_files/validate/final.sh \
