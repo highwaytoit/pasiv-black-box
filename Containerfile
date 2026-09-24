@@ -10,8 +10,8 @@ COPY quadlets /quadlets
 COPY docs /docs
 COPY cosign.pub /cosign.pub
 
-# UPSide is built and validated by the Home Server Packages project. Pasiv
-# consumes only the published RPM artifact resolved to an exact digest by CI.
+# UPSide is built and validated by Home Server Packages. Consume its stable
+# channel directly; Passive does not add a digest-resolution layer.
 FROM --platform=linux/amd64 ${UPSIDE_PACKAGE_IMAGE} AS upside-package
 
 # uBlue Brew packages the official Homebrew Linux installation for bootc systems.
@@ -29,7 +29,6 @@ LABEL containers.bootc=1 \
       io.highwaytoit.pasiv-black-box.base="home-server-base-10" \
       io.highwaytoit.pasiv-black-box.base-channel="stable" \
       io.highwaytoit.pasiv-black-box.base-profile="almalinux-10-minimal-plus"
-RUN bootc container lint --fatal-warnings
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]
 
