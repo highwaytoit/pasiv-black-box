@@ -14,16 +14,11 @@ cp -avf /ctx/system_files/. /
 chown root:root /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
 chmod 0440 /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
 
-# AlmaLinux 10.1+ enables CRB by default. EPEL software on EL10 expects the
-# CRB SELinux policy split to be available, so fail clearly if the upstream
-# base ever changes that contract rather than silently composing a broken image.
 if ! dnf repolist --enabled | grep -Eiq '(^|[[:space:]])crb([[:space:]]|$)'; then
     echo "ERROR: AlmaLinux CRB repository is not enabled in the upstream bootc image."
     exit 1
 fi
 
-# Home Server Base 10 already provides the EPEL capability. Passive consumes
-# EPEL packages during composition without reinstalling epel-release.
 
 read -r -a native_packages <<< "${PASIV_BLACK_BOX_PACKAGES}"
 dnf install -y "${native_packages[@]}"
