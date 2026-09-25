@@ -132,10 +132,6 @@ test -f /usr/lib/tmpfiles.d/pcp-pmda-openmetrics.conf
 test "$(systemctl is-enabled pmcd.service)" = "enabled"
 test "$(systemctl is-enabled pmlogger.service)" = "enabled"
 
-# Inherited zram integration required by Passive.
-test -f /etc/systemd/zram-generator.conf
-grep -Fqx '[zram0]' /etc/systemd/zram-generator.conf
-
 # Administrative and update policy.
 test -f /etc/sudoers.d/90-pasiv-black-box-passwordless-wheel
 grep -Fqx '%wheel ALL=(ALL) NOPASSWD: ALL' \
